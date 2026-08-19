@@ -83,7 +83,7 @@ def main() -> int:
         client: object = VertexClient(
             project=os.environ["GOOGLE_CLOUD_PROJECT"],
             location=os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1"),
-            model=os.environ.get("AI_REVIEW_MODEL", "gemini-2.5-flash"),
+            model=os.environ.get("AI_REVIEW_MODEL", "gemini-3.7-flash"),
         )
     else:
         if not os.environ.get("GEMINI_API_KEY"):
@@ -91,7 +91,7 @@ def main() -> int:
             return 0
         client = GeminiClient(
             api_key=os.environ["GEMINI_API_KEY"],
-            model=os.environ.get("AI_REVIEW_MODEL", "gemini-2.5-flash"),
+            model=os.environ.get("AI_REVIEW_MODEL", "gemini-3.7-flash"),
         )
 
     with tempfile.TemporaryDirectory() as tmp_str:

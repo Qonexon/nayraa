@@ -34,7 +34,7 @@ def main() -> None:
         if model_name is None:
             model_name = os.environ.get("AI_REVIEW_MODEL")
         if model_name is None:
-            model_name = "gemini-2.5-flash"
+            model_name = "gemini-3.7-flash"
 
         rubric: str | None = None
         if args.rubric is not None:

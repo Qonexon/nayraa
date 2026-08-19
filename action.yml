@@ -8,7 +8,7 @@ inputs:
     description: Head commit SHA
     required: true
   model:
-    description: Model name (e.g. gemini-2.5-flash)
+    description: Model name (e.g. gemini-3.7-flash)
     required: false
   src-roots:
     description: Source root directories (comma-separated)
