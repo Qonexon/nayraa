@@ -1,0 +1,58 @@
+name: ai-review
+description: AI-powered code review via Gemini and reviewdog
+inputs:
+  base:
+    description: Base commit SHA
+    required: true
+  head:
+    description: Head commit SHA
+    required: true
+  model:
+    description: Model name (e.g. gemini-2.5-flash)
+    required: false
+  src-roots:
+    description: Source root directories (comma-separated)
+    required: false
+    default: .
+  backend:
+    description: Backend to use (gemini or vertex)
+    required: false
+    default: gemini
+  project:
+    description: Google Cloud project for Vertex AI
+    required: false
+  location:
+    description: Google Cloud location for Vertex AI
+    required: false
+    default: us-central1
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - run: pip install -e .
+      shell: bash
+    - uses: reviewdog/action-setup@v1
+    - run: |
+        ai-review \
+          --repo-root . \
+          --base "${{ inputs.base }}" \
+          --head "${{ inputs.head }}" \
+          --model "${{ inputs.model }}" \
+          --backend "${{ inputs.backend }}" \
+          --project "${{ inputs.project }}" \
+          --location "${{ inputs.location }}" \
+          | reviewdog -f=rdjsonl -name=ai-review \
+              -reporter=github-pr-review \
+              -filter-mode=nofilter \
+              -level=warning
+      env:
+        GEMINI_API_KEY: ${{ env.GEMINI_API_KEY }}
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ env.REVIEWDOG_GITHUB_API_TOKEN }}
+        GOOGLE_CLOUD_PROJECT: ${{ inputs.project }}
+        GOOGLE_CLOUD_LOCATION: ${{ inputs.location }}
+      shell: bash
