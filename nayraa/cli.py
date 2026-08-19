@@ -19,6 +19,7 @@ def main() -> None:
         parser.add_argument("--rubric", type=Path)
         parser.add_argument("--model")
         parser.add_argument("--backend", choices=["gemini", "vertex"], default=None)
+        parser.add_argument("--location", default=None)
         args = parser.parse_args()
 
         if args.src_root:
@@ -55,7 +56,9 @@ def main() -> None:
             if not project:
                 print("GOOGLE_CLOUD_PROJECT is not set", file=sys.stderr)
                 return
-            location = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
+            location = args.location
+            if location is None:
+                location = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
             client: ModelClient = VertexClient(
                 project=project, location=location, model=model_name
             )

@@ -82,7 +82,7 @@ def main() -> int:
             return 0
         client: object = VertexClient(
             project=os.environ["GOOGLE_CLOUD_PROJECT"],
-            location=os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1"),
+            location=os.environ.get("GOOGLE_CLOUD_LOCATION", "global"),
             model=os.environ.get("AI_REVIEW_MODEL", "gemini-3.7-flash"),
         )
     else:

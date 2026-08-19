@@ -24,7 +24,7 @@ inputs:
   location:
     description: Google Cloud location for Vertex AI
     required: false
-    default: us-central1
+    default: global
 runs:
   using: composite
   steps:
