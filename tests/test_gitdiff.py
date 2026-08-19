@@ -1,6 +1,6 @@
 import pytest
 
-from ai_review.gitdiff import GitError, changed_files
+from nayraa.gitdiff import GitError, changed_files
 
 
 def test_changed_files_returns_a_py_with_correct_lines(repo):

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from ai_review import budget, callsites, gitdiff, importgraph
+from nayraa import budget, callsites, gitdiff, importgraph
 
 
 class Section(StrEnum):

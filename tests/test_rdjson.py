@@ -1,7 +1,7 @@
 import json
 
-from ai_review import rdjson
-from ai_review.passes import Finding
+from nayraa import rdjson
+from nayraa.passes import Finding
 
 
 def test_clamp_nearest_line():

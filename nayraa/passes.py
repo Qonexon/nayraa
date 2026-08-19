@@ -2,9 +2,9 @@ import concurrent.futures
 from dataclasses import dataclass
 from typing import Literal
 
-from ai_review import budget
-from ai_review.bundle import Bundle
-from ai_review.model import ModelClient
+from nayraa import budget
+from nayraa.bundle import Bundle
+from nayraa.model import ModelClient
 
 
 @dataclass(frozen=True)

@@ -4,9 +4,9 @@ import sys
 import traceback
 from pathlib import Path
 
-from ai_review import budget, bundle, passes, rdjson
-from ai_review.bundle import build_bundle
-from ai_review.model import GeminiClient, ModelClient, VertexClient
+from nayraa import budget, bundle, passes, rdjson
+from nayraa.bundle import build_bundle
+from nayraa.model import GeminiClient, ModelClient, VertexClient
 
 
 def main() -> None:

@@ -3,7 +3,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from ai_review.budget import CALL_SITE_CONTEXT_LINES, is_excluded
+from nayraa.budget import CALL_SITE_CONTEXT_LINES, is_excluded
 
 
 @dataclass(frozen=True)

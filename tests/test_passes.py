@@ -1,6 +1,6 @@
-from ai_review import passes
-from ai_review.bundle import Bundle, Section
-from ai_review.model import FakeClient
+from nayraa import passes
+from nayraa.bundle import Bundle, Section
+from nayraa.model import FakeClient
 
 
 def test_low_confidence_dropped_before_refute():

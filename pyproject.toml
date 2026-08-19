@@ -1,5 +1,5 @@
 [project]
-name = "ai-review"
+name = "nayraa"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = ["google-genai>=2.18.1,<3.0.0"]
@@ -8,14 +8,14 @@ dependencies = ["google-genai>=2.18.1,<3.0.0"]
 dev = ["pytest>=8.0", "ruff>=0.6", "pyright>=1.1.380"]
 
 [project.scripts]
-ai-review = "ai_review.cli:main"
+nayraa = "nayraa.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["ai_review"]
+packages = ["nayraa"]
 
 [tool.ruff]
 target-version = "py311"
@@ -26,7 +26,7 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pyright]
 pythonVersion = "3.11"
-include = ["ai_review", "tests"]
+include = ["nayraa", "tests"]
 typeCheckingMode = "standard"
 
 [tool.pytest.ini_options]

@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
-from ai_review import bundle
-from ai_review.bundle import Section
+from nayraa import bundle
+from nayraa.bundle import Section
 
 
 class MockImportGraph:

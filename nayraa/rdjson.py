@@ -1,6 +1,6 @@
 import json
 
-from ai_review.passes import Finding
+from nayraa.passes import Finding
 
 
 def clamp_to_diff_lines(

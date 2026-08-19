@@ -2,7 +2,7 @@ import ast
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ai_review.budget import is_excluded
+from nayraa.budget import is_excluded
 
 
 @dataclass

@@ -5,7 +5,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from ai_review.model import GeminiClient, VertexClient
+from nayraa.model import GeminiClient, VertexClient
 
 
 def _make_repo(tmp: Path) -> tuple[str, str]:
@@ -97,7 +97,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp_str:
         tmp = Path(tmp_str)
         base, head = _make_repo(tmp)
-        from ai_review import bundle as B
+        from nayraa import bundle as B
 
         b = B.build_bundle(tmp, base, head, ["."])
         system = "Return zero findings as JSON conforming to the schema."

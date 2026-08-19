@@ -3,7 +3,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from ai_review.budget import is_excluded
+from nayraa.budget import is_excluded
 
 
 @dataclass(frozen=True)

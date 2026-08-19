@@ -1,4 +1,4 @@
-name: ai-review
+name: nayraa
 description: AI-powered code review via Gemini and reviewdog
 inputs:
   base:
@@ -37,8 +37,8 @@ runs:
     - run: pip install -e .
       shell: bash
     - uses: reviewdog/action-setup@v1
-    - run: |
-        ai-review \
+    -       run: |
+        nayraa \
           --repo-root . \
           --base "${{ inputs.base }}" \
           --head "${{ inputs.head }}" \
@@ -46,7 +46,7 @@ runs:
           --backend "${{ inputs.backend }}" \
           --project "${{ inputs.project }}" \
           --location "${{ inputs.location }}" \
-          | reviewdog -f=rdjsonl -name=ai-review \
+          | reviewdog -f=rdjsonl -name=nayraa \
               -reporter=github-pr-review \
               -filter-mode=nofilter \
               -level=warning

@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 
-from ai_review.importgraph import build_graph
+from nayraa.importgraph import build_graph
 
 
 def test_importers_of_a_py(repo):

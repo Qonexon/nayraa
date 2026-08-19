@@ -8,3 +8,4 @@ build/
 *.egg-info/
 .opencode/
 ai-review-spec.md
+nayraa-spec.md

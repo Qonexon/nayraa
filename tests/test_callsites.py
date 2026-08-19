@@ -1,10 +1,10 @@
-from ai_review.callsites import (
+from nayraa.callsites import (
     changed_symbols,
     find_call_sites,
     siblings_of,
     signatures_only,
 )
-from ai_review.gitdiff import unified_diff
+from nayraa.gitdiff import unified_diff
 
 
 def test_changed_symbols_finds_helper(repo):

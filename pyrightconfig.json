@@ -1,5 +1,5 @@
 {
-  "include": ["ai_review", "tests"],
+  "include": ["nayraa", "tests"],
   "pythonVersion": "3.11",
   "typeCheckingMode": "standard",
   "venvPath": ".",
