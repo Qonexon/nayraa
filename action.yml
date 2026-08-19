@@ -8,8 +8,9 @@ inputs:
     description: Head commit SHA
     required: true
   model:
-    description: Model name (e.g. gemini-3.7-flash)
+    description: Model name
     required: false
+    default: ""
   src-roots:
     description: Source root directories (comma-separated)
     required: false
@@ -21,6 +22,7 @@ inputs:
   project:
     description: Google Cloud project for Vertex AI
     required: false
+    default: ""
   location:
     description: Google Cloud location for Vertex AI
     required: false
@@ -28,31 +30,46 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
     - uses: actions/setup-python@v5
       with:
         python-version: "3.11"
-    - run: pip install -e .
+    - run: pip install "$ACTION_PATH"
       shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
     - uses: reviewdog/action-setup@v1
-    -       run: |
-        nayraa \
-          --repo-root . \
-          --base "${{ inputs.base }}" \
-          --head "${{ inputs.head }}" \
-          --model "${{ inputs.model }}" \
-          --backend "${{ inputs.backend }}" \
-          --project "${{ inputs.project }}" \
-          --location "${{ inputs.location }}" \
+    - run: |
+        set -euo pipefail
+        args=(
+          --repo-root .
+          --base "$BASE"
+          --head "$HEAD"
+          --backend "$BACKEND"
+          --location "$LOCATION"
+        )
+        IFS=',' read -ra roots <<< "$SRC_ROOTS"
+        for r in "${roots[@]}"; do
+          args+=(--src-root "$r")
+        done
+        if [ -n "$MODEL" ]; then
+          args+=(--model "$MODEL")
+        fi
+        if [ -n "$PROJECT" ]; then
+          args+=(--project "$PROJECT")
+        fi
+        nayraa "${args[@]}" \
           | reviewdog -f=rdjsonl -name=nayraa \
               -reporter=github-pr-review \
               -filter-mode=nofilter \
               -level=warning
+      shell: bash
       env:
-        GEMINI_API_KEY: ${{ env.GEMINI_API_KEY }}
-        REVIEWDOG_GITHUB_API_TOKEN: ${{ env.REVIEWDOG_GITHUB_API_TOKEN }}
+        BASE: ${{ inputs.base }}
+        HEAD: ${{ inputs.head }}
+        MODEL: ${{ inputs.model }}
+        SRC_ROOTS: ${{ inputs.src-roots }}
+        BACKEND: ${{ inputs.backend }}
+        PROJECT: ${{ inputs.project }}
+        LOCATION: ${{ inputs.location }}
         GOOGLE_CLOUD_PROJECT: ${{ inputs.project }}
         GOOGLE_CLOUD_LOCATION: ${{ inputs.location }}
-      shell: bash
