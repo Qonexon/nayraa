@@ -96,7 +96,7 @@ def build_bundle(repo_root: Path, base: str, head: str, src_roots: list[str]) ->
         importers = graph.importers_of(path)
         if len(importers) > budget.FANOUT_THRESHOLD:
             continue
-        candidates = {p for p in importers if p in already}
+        candidates = {p for p in importers if p not in already}
         if not symbols or not candidates:
             continue
         for snip in callsites.find_call_sites(repo_root, symbols, candidates):
@@ -105,7 +105,8 @@ def build_bundle(repo_root: Path, base: str, head: str, src_roots: list[str]) ->
             )
             ics_blocks.append(snip.text)
             ics_blocks.append("</file>")
-    parts[Section.IMPORTER_CALL_SITES] = "\n".join(ics_blocks)
+    if ics_blocks:
+        parts[Section.IMPORTER_CALL_SITES] = "\n".join(ics_blocks)
 
     sib_blocks: list[str] = []
     seen_sib: set[str] = set()

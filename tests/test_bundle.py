@@ -60,12 +60,24 @@ def test_degradation_drops_imports_records_dropped(repo):
 
 
 def test_siblings_outlive_imports(repo):
-    with patch.object(bundle.budget, "TOKEN_BUDGET", 140):
+    with patch.object(bundle.budget, "TOKEN_BUDGET", 10**9):
+        full = bundle.build_bundle(repo.root, repo.base, repo.head, ["."])
+    target = full.token_count - bundle.budget.estimate_tokens(
+        full.parts[Section.IMPORTS]
+    )
+    with patch.object(bundle.budget, "TOKEN_BUDGET", target):
         b = bundle.build_bundle(repo.root, repo.base, repo.head, ["."])
-        assert b.token_count <= 140
+        assert b.token_count <= target
         assert Section.IMPORTS in b.dropped
         assert Section.SIBLINGS in b.parts
         assert Section.SIBLINGS not in b.dropped
+
+
+def test_importer_call_sites_populated_for_unchanged_importer(repo):
+    with patch.object(bundle.budget, "TOKEN_BUDGET", 10**9):
+        b = bundle.build_bundle(repo.root, repo.base, repo.head, ["."])
+    assert Section.IMPORTER_CALL_SITES in b.parts
+    assert b.parts[Section.IMPORTER_CALL_SITES].strip()
 
 
 def test_wrap_files_signatures_strips_bodies():
