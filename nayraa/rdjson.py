@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 from nayraa.passes import Finding
 
@@ -8,26 +9,18 @@ def clamp_to_diff_lines(
 ) -> Finding:
     path = finding.path
     if path not in changed or not changed[path]:
-        return Finding(
-            path=finding.path,
-            line=1,
-            severity=finding.severity,
-            claim=finding.claim,
-            failure_scenario=finding.failure_scenario,
-            confidence=finding.confidence,
-        )
+        return replace(finding, line=1)
     lines = changed[path]
     if finding.line in lines:
         return finding
     original_line = finding.line
     nearest = min(lines, key=lambda ln: abs(ln - original_line))
-    return Finding(
-        path=finding.path,
+    if finding.synthetic:
+        return replace(finding, line=nearest)
+    return replace(
+        finding,
         line=nearest,
-        severity=finding.severity,
         claim=f"(reported near line {original_line}) {finding.claim}",
-        failure_scenario=finding.failure_scenario,
-        confidence=finding.confidence,
     )
 
 
@@ -48,4 +41,4 @@ def to_rdjsonl(findings: list[Finding]) -> str:
             "code": {"value": f.severity},
         }
         lines.append(json.dumps(obj))
-    return "\n".join(lines) + "\n"
+    return "".join(f"{line}\n" for line in lines)

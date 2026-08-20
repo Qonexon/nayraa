@@ -1,4 +1,5 @@
 import concurrent.futures
+import sys
 from dataclasses import dataclass
 from typing import Literal
 
@@ -15,6 +16,7 @@ class Finding:
     claim: str
     failure_scenario: str
     confidence: float
+    synthetic: bool = False
 
 
 @dataclass
@@ -171,9 +173,14 @@ def refute(client: ModelClient, bundle: Bundle, finding: Finding) -> Verdict:
 
 def review(client: ModelClient, bundle: Bundle, rubric: str | None) -> list[Finding]:
     candidates = find_candidates(client, bundle, rubric)
+    print(f"candidates: {len(candidates)}", file=sys.stderr)
     if len(candidates) > budget.MAX_CANDIDATE_FINDINGS:
         candidates = candidates[: budget.MAX_CANDIDATE_FINDINGS]
     survivors = [f for f in candidates if f.confidence >= budget.MIN_CONFIDENCE]
+    print(
+        f"below_confidence: {len(candidates) - len(survivors)}",
+        file=sys.stderr,
+    )
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=budget.REFUTE_WORKERS
     ) as executor:
@@ -181,9 +188,10 @@ def review(client: ModelClient, bundle: Bundle, rubric: str | None) -> list[Find
         verdicts: dict[Finding, Verdict] = {}
         for fut in concurrent.futures.as_completed(futures):
             verdicts[futures[fut]] = fut.result()
-    survivors = [f for f in survivors if not verdicts[f].refuted]
-    survivors.sort(key=lambda f: (f.severity != "blocker", -f.confidence))
-    final = survivors[: budget.MAX_FINAL_FINDINGS]
+    kept = [f for f in survivors if not verdicts[f].refuted]
+    print(f"refuted: {len(survivors) - len(kept)}", file=sys.stderr)
+    kept.sort(key=lambda f: (f.severity != "blocker", -f.confidence))
+    final = kept[: budget.MAX_FINAL_FINDINGS]
     for path, n in bundle.high_fanout:
         final.append(
             Finding(
@@ -198,6 +206,8 @@ def review(client: ModelClient, bundle: Bundle, rubric: str | None) -> list[Find
                     "exceeded the threshold. Manually verify blast radius."
                 ),
                 confidence=1.0,
+                synthetic=True,
             )
         )
+    print(f"reported: {len(final)}", file=sys.stderr)
     return final
