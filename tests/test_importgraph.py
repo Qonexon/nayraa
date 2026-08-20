@@ -90,3 +90,30 @@ def test_relative_import_level2(tmp_path: Path):
     )
     graph = build_graph(repo_root, ["."])
     assert "pkg/sub/e.py" in graph.importers_of("pkg/a.py")
+
+
+def _pkg(tmp_path, caller_src):
+    from nayraa.importgraph import build_graph
+
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "__init__.py").write_text("")
+    (tmp_path / "pkg" / "target.py").write_text("def helper():\n    return 1\n")
+    (tmp_path / "pkg" / "caller.py").write_text(caller_src)
+    return build_graph(tmp_path, ["."])
+
+
+def test_import_from_package_resolves_submodule(tmp_path):
+    g = _pkg(tmp_path, "from pkg import target\n")
+    assert "pkg/target.py" in g.imports_of("pkg/caller.py")
+    assert "pkg/caller.py" in g.importers_of("pkg/target.py")
+
+
+def test_relative_import_without_module(tmp_path):
+    g = _pkg(tmp_path, "from . import target\n")
+    assert "pkg/target.py" in g.imports_of("pkg/caller.py")
+
+
+def test_import_from_submodule_still_resolves(tmp_path):
+    g = _pkg(tmp_path, "from pkg.target import helper\n")
+    assert "pkg/target.py" in g.imports_of("pkg/caller.py")
+
