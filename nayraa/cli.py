@@ -6,7 +6,7 @@ from pathlib import Path
 
 from nayraa import budget, bundle, passes, rdjson
 from nayraa.bundle import build_bundle
-from nayraa.model import GeminiClient, ModelClient, VertexClient
+from nayraa.model import GeminiClient, ModelClient
 
 
 def main() -> None:
@@ -18,18 +18,12 @@ def main() -> None:
         parser.add_argument("--src-root", action="append", default=[])
         parser.add_argument("--rubric", type=Path)
         parser.add_argument("--model")
-        parser.add_argument("--backend", choices=["gemini", "vertex"], default=None)
-        parser.add_argument("--location", default=None)
         args = parser.parse_args()
 
         if args.src_root:
             src_roots = args.src_root
         else:
             src_roots = ["."]
-
-        backend = args.backend
-        if backend is None:
-            backend = os.environ.get("AI_REVIEW_BACKEND", "gemini")
 
         model_name = args.model
         if model_name is None:
@@ -51,23 +45,11 @@ def main() -> None:
                 print("rubric file not found", file=sys.stderr)
                 rubric = None
 
-        if backend == "vertex":
-            project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-            if not project:
-                print("GOOGLE_CLOUD_PROJECT is not set", file=sys.stderr)
-                return
-            location = args.location
-            if location is None:
-                location = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
-            client: ModelClient = VertexClient(
-                project=project, location=location, model=model_name
-            )
-        else:
-            api_key = os.environ.get("GEMINI_API_KEY")
-            if not api_key:
-                print("GEMINI_API_KEY is not set", file=sys.stderr)
-                return
-            client = GeminiClient(api_key=api_key, model=model_name)
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            print("GEMINI_API_KEY is not set", file=sys.stderr)
+            return
+        client: ModelClient = GeminiClient(api_key=api_key, model=model_name)
 
         b = build_bundle(args.repo_root, args.base, args.head, src_roots)
 

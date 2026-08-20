@@ -15,18 +15,6 @@ inputs:
     description: Source root directories (comma-separated)
     required: false
     default: .
-  backend:
-    description: Backend to use (gemini or vertex)
-    required: false
-    default: gemini
-  project:
-    description: Google Cloud project for Vertex AI
-    required: false
-    default: ""
-  location:
-    description: Google Cloud location for Vertex AI
-    required: false
-    default: global
 runs:
   using: composite
   steps:
@@ -40,22 +28,13 @@ runs:
     - uses: reviewdog/action-setup@v1
     - run: |
         set -euo pipefail
-        args=(
-          --repo-root .
-          --base "$BASE"
-          --head "$HEAD"
-          --backend "$BACKEND"
-          --location "$LOCATION"
-        )
+        args=(--repo-root . --base "$BASE" --head "$HEAD")
         IFS=',' read -ra roots <<< "$SRC_ROOTS"
         for r in "${roots[@]}"; do
           args+=(--src-root "$r")
         done
         if [ -n "$MODEL" ]; then
           args+=(--model "$MODEL")
-        fi
-        if [ -n "$PROJECT" ]; then
-          args+=(--project "$PROJECT")
         fi
         nayraa "${args[@]}" \
           | reviewdog -f=rdjsonl -name=nayraa \
@@ -68,8 +47,3 @@ runs:
         HEAD: ${{ inputs.head }}
         MODEL: ${{ inputs.model }}
         SRC_ROOTS: ${{ inputs.src-roots }}
-        BACKEND: ${{ inputs.backend }}
-        PROJECT: ${{ inputs.project }}
-        LOCATION: ${{ inputs.location }}
-        GOOGLE_CLOUD_PROJECT: ${{ inputs.project }}
-        GOOGLE_CLOUD_LOCATION: ${{ inputs.location }}

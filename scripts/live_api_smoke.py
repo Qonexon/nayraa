@@ -5,7 +5,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from nayraa.model import GeminiClient, VertexClient
+from nayraa.model import GeminiClient
 
 
 def _make_repo(tmp: Path) -> tuple[str, str]:
@@ -73,26 +73,13 @@ FINDINGS_SCHEMA = {
 
 
 def main() -> int:
-    backend = os.environ.get("AI_REVIEW_BACKEND", "gemini")
-    if backend == "vertex":
-        if not os.environ.get("GOOGLE_CLOUD_PROJECT"):
-            print(
-                "GOOGLE_CLOUD_PROJECT not set; skipping live API smoke", file=sys.stderr
-            )
-            return 0
-        client: object = VertexClient(
-            project=os.environ["GOOGLE_CLOUD_PROJECT"],
-            location=os.environ.get("GOOGLE_CLOUD_LOCATION", "global"),
-            model=os.environ.get("AI_REVIEW_MODEL", "gemini-3.7-flash"),
-        )
-    else:
-        if not os.environ.get("GEMINI_API_KEY"):
-            print("GEMINI_API_KEY not set; skipping live API smoke", file=sys.stderr)
-            return 0
-        client = GeminiClient(
-            api_key=os.environ["GEMINI_API_KEY"],
-            model=os.environ.get("AI_REVIEW_MODEL", "gemini-3.7-flash"),
-        )
+    if not os.environ.get("GEMINI_API_KEY"):
+        print("GEMINI_API_KEY not set; skipping live API smoke", file=sys.stderr)
+        return 0
+    client: object = GeminiClient(
+        api_key=os.environ["GEMINI_API_KEY"],
+        model=os.environ.get("AI_REVIEW_MODEL", "gemini-3.7-flash"),
+    )
 
     with tempfile.TemporaryDirectory() as tmp_str:
         tmp = Path(tmp_str)
@@ -118,7 +105,7 @@ def main() -> int:
             assert f["severity"] in {"blocker", "major"}
         print(
             json.dumps(
-                {"ok": True, "backend": backend, "findings": len(result["findings"])}
+                {"ok": True, "findings": len(result["findings"])}
             )
         )
     return 0
