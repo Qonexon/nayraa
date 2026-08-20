@@ -8,8 +8,6 @@ def clamp_to_diff_lines(
     finding: Finding, changed: dict[str, frozenset[int]]
 ) -> Finding:
     path = finding.path
-    if path not in changed or not changed[path]:
-        return replace(finding, line=1)
     lines = changed[path]
     if finding.line in lines:
         return finding
