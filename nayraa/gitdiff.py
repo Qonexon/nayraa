@@ -66,6 +66,9 @@ def changed_files(repo_root: Path, base: str, head: str) -> list[ChangedFile]:
             start = int(match.group(3))
             count_str = match.group(4)
             count = int(count_str) if count_str else 1
+            if count == 0:
+                changed_lines.add(max(1, start))
+                continue
             for i in range(count):
                 changed_lines.add(start + i)
         changed.append(
