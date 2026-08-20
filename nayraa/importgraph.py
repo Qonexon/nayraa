@@ -66,34 +66,24 @@ def build_graph(repo_root: Path, src_roots: list[str]) -> ImportGraph:
                     if resolved:
                         _record_edge(imports, importers, importing_path, resolved)
             elif isinstance(node, ast.ImportFrom):
-                if node.level == 0 and node.module:
-                    mod_parts = node.module.split(".")
-                    resolved = _resolve_module(repo_root, src_roots, mod_parts)
-                    if resolved:
-                        _record_edge(imports, importers, importing_path, resolved)
-                elif node.level > 0 and node.module:
-                    parts = list(file_dir_parts)
+                if node.level == 0:
+                    if not node.module:
+                        continue
+                    base_parts = node.module.split(".")
+                else:
+                    base_parts = list(file_dir_parts)
                     for _ in range(node.level - 1):
-                        if parts:
-                            parts.pop()
-                    parts.extend(node.module.split("."))
-                    resolved = _resolve_module(repo_root, src_roots, parts)
-                    if resolved:
-                        _record_edge(imports, importers, importing_path, resolved)
-                elif node.level > 0 and not node.module:
-                    parts = list(file_dir_parts)
-                    for _ in range(node.level - 1):
-                        if parts:
-                            parts.pop()
-                    if parts:
-                        resolved = _resolve_module(repo_root, src_roots, parts)
-                    else:
-                        resolved = None
-                        for src_root in src_roots:
-                            init_file = repo_root / src_root / "__init__.py"
-                            if init_file.exists():
-                                resolved = init_file.relative_to(repo_root).as_posix()
-                                break
-                    if resolved:
-                        _record_edge(imports, importers, importing_path, resolved)
+                        if base_parts:
+                            base_parts.pop()
+                    if node.module:
+                        base_parts.extend(node.module.split("."))
+                resolved = _resolve_module(repo_root, src_roots, base_parts)
+                if resolved:
+                    _record_edge(imports, importers, importing_path, resolved)
+                for alias in node.names:
+                    sub = _resolve_module(
+                        repo_root, src_roots, base_parts + [alias.name]
+                    )
+                    if sub:
+                        _record_edge(imports, importers, importing_path, sub)
     return ImportGraph(imports=imports, importers=importers)
