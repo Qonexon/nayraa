@@ -116,3 +116,27 @@ def siblings_of(repo_root: Path, path: str, limit: int = 2) -> list[str]:
         siblings.append((sibling.stat().st_size, rel))
     siblings.sort(key=lambda x: x[0], reverse=True)
     return [s[1] for s in siblings[:limit]]
+
+
+def enclosing_symbols(
+    root: Path, changed_lines_by_path: dict[str, frozenset[int]]
+) -> set[str]:
+    symbols: set[str] = set()
+    for path, lines in changed_lines_by_path.items():
+        if not path.endswith(".py") or not lines or is_excluded(path):
+            continue
+        try:
+            tree = ast.parse((root / path).read_text())
+        except (OSError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(
+                node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
+            ):
+                continue
+            if node.end_lineno is None:
+                continue
+            if any(node.lineno <= ln <= node.end_lineno for ln in lines):
+                if len(node.name) >= 3 and not node.name.startswith("__"):
+                    symbols.add(node.name)
+    return symbols

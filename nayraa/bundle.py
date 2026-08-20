@@ -64,7 +64,9 @@ def build_bundle(repo_root: Path, base: str, head: str, src_roots: list[str]) ->
     changed = gitdiff.changed_files(repo_root, base, head)
     diff_text = gitdiff.unified_diff(repo_root, base, head)
     graph = importgraph.build_graph(repo_root, src_roots)
-    symbols = callsites.changed_symbols(diff_text)
+    symbols = callsites.changed_symbols(diff_text) | callsites.enclosing_symbols(
+        repo_root, {cf.path: cf.changed_lines for cf in changed}
+    )
     python_changed = [cf.path for cf in changed if cf.path.endswith(".py")]
     already: set[str] = {cf.path for cf in changed}
 

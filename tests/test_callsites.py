@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from nayraa.callsites import (
     changed_symbols,
+    enclosing_symbols,
     find_call_sites,
     siblings_of,
     signatures_only,
@@ -72,3 +75,23 @@ def test_end_line_at_eof(repo):
             assert s.text.count("\n") + 1 == s.end_line - s.start_line + 1
     finally:
         pkg_b.write_text(original)
+
+
+def test_enclosing_symbols_body_change(tmp_path):
+    src = (
+        "def outer(x):\n"
+        "    y = x + 1\n"
+        "    return y\n"
+        "\n"
+        "\n"
+        "class Thing:\n"
+        "    def method(self):\n"
+        "        return 1\n"
+    )
+    (tmp_path / "m.py").write_text(src)
+    assert enclosing_symbols(tmp_path, {"m.py": frozenset([2])}) == {"outer"}
+    assert enclosing_symbols(tmp_path, {"m.py": frozenset([8])}) == {"Thing", "method"}
+
+
+def test_enclosing_symbols_skips_non_python():
+    assert enclosing_symbols(Path("."), {"a.yml": frozenset([1])}) == set()
