@@ -51,15 +51,6 @@ class GeminiClient(_BaseClient):
         return self._complete_json(self._client, self._model, system, user, schema)
 
 
-class VertexClient(_BaseClient):
-    def __init__(self, project: str, location: str, model: str) -> None:
-        self._client = genai.Client(vertexai=True, project=project, location=location)
-        self._model = model
-
-    def complete_json(self, system: str, user: str, schema: dict) -> dict:
-        return self._complete_json(self._client, self._model, system, user, schema)
-
-
 class FakeClient:
     def __init__(self, responses: list[dict]) -> None:
         self._responses = responses

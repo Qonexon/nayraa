@@ -117,3 +117,39 @@ def test_one_json_object_per_line():
     assert len(lines) == 2
     for line in lines:
         json.loads(line)
+
+
+def test_empty_findings_produces_empty_output():
+    assert rdjson.to_rdjsonl([]) == ""
+
+
+def test_synthetic_finding_clamps_without_prefix():
+    f = Finding(
+        path="foo.py",
+        line=1,
+        severity="major",
+        claim="high fan-out change: 40 dependents, impact not machine-verified",
+        failure_scenario="test scenario",
+        confidence=1.0,
+        synthetic=True,
+    )
+    changed = {"foo.py": frozenset([10, 20, 30])}
+    result = rdjson.clamp_to_diff_lines(f, changed)
+    assert result.line == 10
+    assert result.claim == f.claim
+    assert result.synthetic is True
+
+
+def test_clamp_preserves_synthetic_false():
+    f = Finding(
+        path="foo.py",
+        line=50,
+        severity="major",
+        claim="test claim",
+        failure_scenario="test scenario",
+        confidence=0.8,
+    )
+    changed = {"foo.py": frozenset([10])}
+    result = rdjson.clamp_to_diff_lines(f, changed)
+    assert result.synthetic is False
+    assert result.claim == "(reported near line 50) test claim"
