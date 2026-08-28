@@ -15,6 +15,12 @@ inputs:
     description: Source root directories (comma-separated)
     required: false
     default: .
+  shape-review:
+    description: >
+      Review the shape of the pull request as a whole and post the result as a
+      single sticky comment. Advisory, unmeasured, and off by default.
+    required: false
+    default: "false"
 runs:
   using: composite
   steps:
@@ -36,6 +42,9 @@ runs:
         if [ -n "$MODEL" ]; then
           args+=(--model "$MODEL")
         fi
+        if [ "$SHAPE_REVIEW" = "true" ]; then
+          args+=(--shape-out "$SHAPE_FILE")
+        fi
         nayraa "${args[@]}" \
           | reviewdog -f=rdjsonl -name=nayraa \
               -reporter=github-pr-review \
@@ -47,3 +56,39 @@ runs:
         HEAD: ${{ inputs.head }}
         MODEL: ${{ inputs.model }}
         SRC_ROOTS: ${{ inputs.src-roots }}
+        SHAPE_REVIEW: ${{ inputs.shape-review }}
+        SHAPE_FILE: ${{ runner.temp }}/nayraa-shape.md
+    - if: ${{ inputs.shape-review == 'true' && github.event.pull_request.number }}
+      run: |
+        set -euo pipefail
+        if [ ! -f "$SHAPE_FILE" ]; then
+          echo "shape review produced no output; leaving any existing comment alone"
+          exit 0
+        fi
+        ids=$(gh api "repos/${REPO}/issues/${PR}/comments" --paginate \
+                --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id") || ids=""
+        id=${ids%%$'\n'*}
+        if [ -s "$SHAPE_FILE" ]; then
+          body=$(cat "$SHAPE_FILE")
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${id}" \
+              -f body="$body" >/dev/null
+            echo "updated shape comment ${id}"
+          else
+            gh api -X POST "repos/${REPO}/issues/${PR}/comments" \
+              -f body="$body" >/dev/null
+            echo "created shape comment"
+          fi
+        elif [ -n "$id" ]; then
+          gh api -X DELETE "repos/${REPO}/issues/comments/${id}" >/dev/null
+          echo "removed resolved shape comment ${id}"
+        else
+          echo "no shape objections"
+        fi
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+        MARKER: "<!-- nayraa:shape -->"
+        SHAPE_FILE: ${{ runner.temp }}/nayraa-shape.md
