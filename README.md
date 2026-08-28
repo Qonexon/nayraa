@@ -109,7 +109,7 @@ with `pass`) before being dropped entirely, and `siblings` outlives it.
 
 ## Pull request shape
 
-Off by default. Set `shape-review: "true"` to enable it.
+On by default. Set `summary-comment: "false"` to turn the lane and its comment off.
 
 ```
 git diff ──▶ shape signals ──▶ find objections ──▶ justify each ──▶ one sticky comment
@@ -143,9 +143,22 @@ keeps the objection instead of dropping it. Applying the correctness posture her
 silence the lane completely, because "this does four things" has no line to prove. The
 counterweights are the closed set of kinds, the mandatory evidence, and the cap of three.
 
-Results are posted as a single sticky comment, updated in place on each push and deleted
-outright once the objections are gone. Nothing is ever posted inline, and nothing here
-blocks a merge.
+## The summary comment
+
+Both lanes report into one sticky comment, updated in place on every push. It is posted on
+every run, including runs that found nothing:
+
+- **Code defects** — a table of what the correctness lane reported, with severity and
+  location. Every row is also posted inline on the line it concerns; the table exists so
+  the state of a review is legible without hunting through the Files tab.
+- **Shape** — the objections, with the paths that carry each one.
+- **No issues found** — stated explicitly when both lanes came back empty, along with what
+  that does and does not mean.
+
+That last case is the point of always posting. A reviewer that stays silent is
+indistinguishable from one that crashed, and "nothing survived either lane" is a different
+claim from "this code is fine" — the comment says which one it is. Shape objections never
+appear inline, and nothing here blocks a merge.
 
 ## Configuration
 
@@ -157,7 +170,7 @@ blocks a merge.
 | `head` | yes | — | head commit SHA |
 | `src-roots` | no | `.` | comma-separated package roots for import resolution |
 | `model` | no | — | overrides the built-in default |
-| `shape-review` | no | `"false"` | enable the shape lane and its sticky comment |
+| `summary-comment` | no | `"true"` | shape lane plus the sticky summary comment |
 
 ### Environment
 
@@ -186,10 +199,11 @@ nayraa --repo-root . --base "$BASE_SHA" --head "$HEAD_SHA" \
 `-filter-mode=nofilter` is required. The default mode reports only on added lines, which
 silently discards findings anchored to context lines.
 
-`--shape-out PATH` additionally runs the shape lane and writes the comment body to `PATH`
-— markdown when there are objections, an empty file when there are none, and no file at
-all if the lane failed. stdout stays pure rdjsonl either way, so the pipe is unaffected.
-Posting that file is the caller's job; the action does it with `gh`.
+`--summary-out PATH` additionally runs the shape lane and writes the summary comment body
+to `PATH`. The file is always written, including when nothing was found; if the shape lane
+itself fails, the summary is still written with the correctness findings alone. stdout
+stays pure rdjsonl either way, so the pipe is unaffected. Posting that file is the
+caller's job; the action does it with `gh`.
 
 ## Observability
 
@@ -250,12 +264,13 @@ highest-yield findings tend to live.
 - **The token budget is 280K, well under Gemini's limit.** That is deliberate — reasoning
   over 800K tokens of code is measurably worse than over 200K — but it means very large
   pull requests get trimmed.
-- **Shape review is unmeasured.** It is new, it is off by default, and no claim about its
-  precision is anything but a stance until there is an eval set. It exists to collect the
-  data that would let us judge it. Turn it on expecting to tune it.
-- **Shape review needs `pull-requests: write` and a pull request event.** It posts through
-  the GitHub API using `github.token`, so it is skipped outside `pull_request` runs and,
-  like the inline lane, does not work on fork pull requests.
+- **Shape review is unmeasured.** It is new, it is on by default so that it produces the
+  data that would let us judge it, and until there is an eval set no claim about its
+  precision is anything but a stance. Expect to tune it; `summary-comment: "false"` turns
+  it off.
+- **The summary comment needs `pull-requests: write` and a pull request event.** It posts
+  through the GitHub API using `github.token`, so it is skipped outside `pull_request`
+  runs and, like the inline lane, does not work on fork pull requests.
 - **This is a young project** (`v0`). The interface may move. Pin the `v0` alias rather
   than assuming stability.
 

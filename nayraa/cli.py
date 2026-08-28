@@ -17,7 +17,7 @@ def main() -> None:
         parser.add_argument("--head", required=True)
         parser.add_argument("--src-root", action="append", default=[])
         parser.add_argument("--rubric", type=Path)
-        parser.add_argument("--shape-out", type=Path)
+        parser.add_argument("--summary-out", type=Path)
         parser.add_argument("--model")
         args = parser.parse_args()
 
@@ -69,14 +69,24 @@ def main() -> None:
         output = rdjson.to_rdjsonl(clamped)
         print(output, end="")
 
-        if args.shape_out is not None:
+        if args.summary_out is not None:
+            pr_shape: shape.PrShape | None = None
             try:
                 pr_shape = shape.compute(args.repo_root, args.base, args.head)
                 print(f"shape: {pr_shape.files_changed} files", file=sys.stderr)
-                objections = passes.review_shape(client, b, pr_shape)
-                args.shape_out.write_text(comment.render_markdown(objections, pr_shape))
             except Exception:
                 traceback.print_exc(file=sys.stderr)
+
+            objections: list[passes.ShapeObjection] = []
+            if pr_shape is not None:
+                try:
+                    objections = passes.review_shape(client, b, pr_shape)
+                except Exception:
+                    traceback.print_exc(file=sys.stderr)
+
+            args.summary_out.write_text(
+                comment.render_markdown(clamped, objections, pr_shape)
+            )
     except Exception:
         traceback.print_exc(file=sys.stderr)
         return

@@ -87,11 +87,16 @@ pattern is a prior that makes the model hunt for that pattern and find it where 
 If you loosen the finder and the refuter in the same change, you have moved precision in
 an unknown direction. Say so in the pull request, and prefer changing one end at a time.
 
-**Lane 2 is unmeasured.** It exists to collect the data that would let us judge it, and it
-is off by default for that reason. Until there is an eval set — real pull requests, known
-planted defects, hit rate and false-positive rate — no claim about either lane's precision
-is anything more than a stance. Building that harness beats adding another prompt bullet
-to either lane.
+**Lane 2 is unmeasured.** It is on by default because it only produces the data that would
+let us judge it by running. Until there is an eval set — real pull requests, known planted
+defects, hit rate and false-positive rate — no claim about either lane's precision is
+anything more than a stance. Building that harness beats adding another prompt bullet to
+either lane.
+
+**Say what happened, even when nothing did.** Both lanes report into one sticky comment
+that is posted on every run, including empty ones. A reviewer that stays silent is
+indistinguishable from one that crashed, and "nothing survived either lane" is a different
+claim from "this code is fine". The comment says which.
 
 ## Layout
 
@@ -102,9 +107,10 @@ to either lane.
 | `callsites` | symbols, call sites, siblings, signature stripping |
 | `bundle` | assemble and trim the context bundle |
 | `shape` | deterministic pull-request shape signals, no model |
+| `model` | the Gemini client and the fake used in tests |
 | `passes` | the four model calls: find, refute, assess shape, justify |
 | `rdjson` | lane 1 output — rdjsonl for reviewdog |
-| `comment` | lane 2 output — markdown for one sticky comment |
+| `comment` | both lanes' summary — markdown for one sticky comment |
 | `budget` | every tunable constant |
 | `cli` | wiring |
 

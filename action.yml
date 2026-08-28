@@ -15,12 +15,12 @@ inputs:
     description: Source root directories (comma-separated)
     required: false
     default: .
-  shape-review:
+  summary-comment:
     description: >
-      Review the shape of the pull request as a whole and post the result as a
-      single sticky comment. Advisory, unmeasured, and off by default.
+      Review the shape of the pull request as a whole and post one sticky comment
+      summarising both lanes, including when nothing was found. Advisory only.
     required: false
-    default: "false"
+    default: "true"
 runs:
   using: composite
   steps:
@@ -42,8 +42,8 @@ runs:
         if [ -n "$MODEL" ]; then
           args+=(--model "$MODEL")
         fi
-        if [ "$SHAPE_REVIEW" = "true" ]; then
-          args+=(--shape-out "$SHAPE_FILE")
+        if [ "$SUMMARY_COMMENT" = "true" ]; then
+          args+=(--summary-out "$SUMMARY_FILE")
         fi
         nayraa "${args[@]}" \
           | reviewdog -f=rdjsonl -name=nayraa \
@@ -56,39 +56,43 @@ runs:
         HEAD: ${{ inputs.head }}
         MODEL: ${{ inputs.model }}
         SRC_ROOTS: ${{ inputs.src-roots }}
-        SHAPE_REVIEW: ${{ inputs.shape-review }}
-        SHAPE_FILE: ${{ runner.temp }}/nayraa-shape.md
-    - if: ${{ inputs.shape-review == 'true' && github.event.pull_request.number }}
+        SUMMARY_COMMENT: ${{ inputs.summary-comment }}
+        SUMMARY_FILE: ${{ runner.temp }}/nayraa-summary.md
+    - if: ${{ !cancelled() && inputs.summary-comment == 'true' && github.event.pull_request.number }}
       run: |
-        set -euo pipefail
-        if [ ! -f "$SHAPE_FILE" ]; then
-          echo "shape review produced no output; leaving any existing comment alone"
+        set -uo pipefail
+        if [ ! -s "$SUMMARY_FILE" ]; then
+          echo "no summary was produced; leaving any existing comment alone"
           exit 0
         fi
         ids=$(gh api "repos/${REPO}/issues/${PR}/comments" --paginate \
-                --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id") || ids=""
+                --jq ".[] | select(.user.type == \"Bot\")
+                          | select(.body | startswith(\"${MARKER}\")) | .id") || ids=""
         id=${ids%%$'\n'*}
-        if [ -s "$SHAPE_FILE" ]; then
-          body=$(cat "$SHAPE_FILE")
-          if [ -n "$id" ]; then
-            gh api -X PATCH "repos/${REPO}/issues/comments/${id}" \
-              -f body="$body" >/dev/null
-            echo "updated shape comment ${id}"
-          else
-            gh api -X POST "repos/${REPO}/issues/${PR}/comments" \
-              -f body="$body" >/dev/null
-            echo "created shape comment"
-          fi
-        elif [ -n "$id" ]; then
-          gh api -X DELETE "repos/${REPO}/issues/comments/${id}" >/dev/null
-          echo "removed resolved shape comment ${id}"
+        body=$(cat "$SUMMARY_FILE")
+        if [ -n "$id" ]; then
+          gh api -X PATCH "repos/${REPO}/issues/comments/${id}" \
+            -f body="$body" >/dev/null \
+            && echo "updated summary comment ${id}" \
+            || echo "could not update summary comment ${id}"
+          for extra in ${ids#*$'\n'}; do
+            if [ "$extra" != "$id" ]; then
+              gh api -X DELETE "repos/${REPO}/issues/comments/${extra}" >/dev/null \
+                && echo "deleted duplicate summary comment ${extra}" \
+                || echo "could not delete duplicate summary comment ${extra}"
+            fi
+          done
         else
-          echo "no shape objections"
+          gh api -X POST "repos/${REPO}/issues/${PR}/comments" \
+            -f body="$body" >/dev/null \
+            && echo "created summary comment" \
+            || echo "could not create summary comment"
         fi
+        exit 0
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
         REPO: ${{ github.repository }}
         PR: ${{ github.event.pull_request.number }}
-        MARKER: "<!-- nayraa:shape -->"
-        SHAPE_FILE: ${{ runner.temp }}/nayraa-shape.md
+        MARKER: "<!-- nayraa:summary -->"
+        SUMMARY_FILE: ${{ runner.temp }}/nayraa-summary.md
