@@ -148,3 +148,52 @@ def test_rubric_present_has_conventions():
     call_system, _, _ = client.calls[0]
     assert "CODEBASE CONVENTIONS" in call_system
     assert "always use type hints" in call_system
+
+
+def test_architectural_blast_radius_finding_upheld():
+    responses = [
+        {
+            "findings": [
+                {
+                    "path": "api/views/product.py",
+                    "line": 180,
+                    "severity": "blocker",
+                    "claim": (
+                        "Granularity mismatch: hiding a single item excludes "
+                        "the entire parent channel"
+                    ),
+                    "failure_scenario": (
+                        "Marking one provider product hidden excludes sibling "
+                        "products on the same talent channel"
+                    ),
+                    "confidence": 0.95,
+                }
+            ]
+        },
+        {
+            "refuted": False,
+            "reason": "No guard prevents sibling channel exclusion in query",
+        },
+    ]
+    client = FakeClient(responses)
+    b = Bundle(
+        parts={Section.DIFF: ""},
+        token_count=0,
+        dropped=[],
+        high_fanout=[],
+    )
+    result = passes.review(client, b, rubric=None)
+    assert len(result) == 1
+    assert result[0].path == "api/views/product.py"
+    assert result[0].severity == "blocker"
+    assert "Granularity mismatch" in result[0].claim
+    assert result[0].confidence == 0.95
+
+
+def test_system_prompt_includes_structural_defect_patterns():
+    assert "Granularity and blast-radius mismatches" in passes.SYSTEM_PROMPT_FINDINGS
+    assert "Polarity and fail-open inversions" in passes.SYSTEM_PROMPT_FINDINGS
+    assert "Precedence and shadowing collisions" in passes.SYSTEM_PROMPT_FINDINGS
+    assert "Incomplete state-space expansions" in passes.SYSTEM_PROMPT_FINDINGS
+    assert "Edge-only invariant enforcement" in passes.SYSTEM_PROMPT_FINDINGS
+    assert "architectural or blast-radius claims" in passes.SYSTEM_PROMPT_VERDICT

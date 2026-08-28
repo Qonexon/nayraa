@@ -1,4 +1,4 @@
-name: ai-review
+name: nayraa review
 on: pull_request
 
 permissions:
@@ -6,7 +6,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  review:
+  nayraa:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
