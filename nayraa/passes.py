@@ -396,6 +396,8 @@ def review_shape(
         for o in objections
         if o.confidence >= budget.MIN_SHAPE_CONFIDENCE and o.evidence
     ]
+    survivors.sort(key=lambda o: -o.confidence)
+    survivors = survivors[: budget.MAX_SHAPE_OBJECTIONS]
     print(
         f"shape_dropped_before_justify: {len(objections) - len(survivors)}",
         file=sys.stderr,
@@ -411,7 +413,5 @@ def review_shape(
             justifications[futures[fut]] = fut.result()
     kept = [o for o in survivors if not justifications[o].justified]
     print(f"shape_justified: {len(survivors) - len(kept)}", file=sys.stderr)
-    kept.sort(key=lambda o: -o.confidence)
-    final = kept[: budget.MAX_SHAPE_OBJECTIONS]
-    print(f"shape_reported: {len(final)}", file=sys.stderr)
-    return final
+    print(f"shape_reported: {len(kept)}", file=sys.stderr)
+    return kept

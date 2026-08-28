@@ -231,11 +231,11 @@ def test_objections_capped_and_ordered_by_confidence(monkeypatch):
             },
             {"justified": False, "reason": "r"},
             {"justified": False, "reason": "r"},
-            {"justified": False, "reason": "r"},
         ]
     )
     result = passes.review_shape(client, _bundle(), SHAPE)
     assert [o.claim for o in result] == ["high", "mid"]
+    assert len(client.calls) == 3
 
 
 def test_shape_reaches_the_model():
