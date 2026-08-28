@@ -77,7 +77,7 @@ def main() -> None:
             except Exception:
                 traceback.print_exc(file=sys.stderr)
 
-            objections: list[passes.ShapeObjection] = []
+            objections: list[passes.ShapeObjection] | None = None
             if pr_shape is not None:
                 try:
                     objections = passes.review_shape(client, b, pr_shape)

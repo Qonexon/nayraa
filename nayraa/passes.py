@@ -392,7 +392,7 @@ def _grounded_evidence(
     if not paths:
         return evidence
     known = set(paths)
-    return tuple(e for e in evidence if e.lstrip("./") in known or e in known)
+    return tuple(e for e in evidence if e.removeprefix("./") in known)
 
 
 def review_shape(

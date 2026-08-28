@@ -116,4 +116,3 @@ def test_relative_import_without_module(tmp_path):
 def test_import_from_submodule_still_resolves(tmp_path):
     g = _pkg(tmp_path, "from pkg.target import helper\n")
     assert "pkg/target.py" in g.imports_of("pkg/caller.py")
-

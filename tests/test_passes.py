@@ -261,6 +261,25 @@ def test_evidence_that_is_not_a_changed_path_is_dropped():
     assert len(client.calls) == 1
 
 
+def test_traversal_evidence_is_not_treated_as_a_changed_path():
+    client = FakeClient(
+        [{"objections": [_objection(evidence=["../api/export.py"])]}],
+    )
+    result = passes.review_shape(client, _bundle(), GROUNDED_SHAPE)
+    assert result == []
+
+
+def test_dot_slash_prefix_is_accepted():
+    client = FakeClient(
+        [
+            {"objections": [_objection(evidence=["./api/export.py"])]},
+            {"justified": False, "reason": "r"},
+        ]
+    )
+    result = passes.review_shape(client, _bundle(), GROUNDED_SHAPE)
+    assert len(result) == 1
+
+
 def test_ungrounded_evidence_is_stripped_from_a_real_objection():
     client = FakeClient(
         [

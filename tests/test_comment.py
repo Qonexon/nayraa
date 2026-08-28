@@ -34,8 +34,14 @@ OBJECTION = ShapeObjection(
 def test_nothing_found_still_posts_an_explicit_result():
     body = comment.render_markdown([], [], SHAPE)
     assert body.startswith(comment.MARKER)
-    assert "**No issues found.**" in body
-    assert "not a claim that the code is perfect" in body
+    assert "✅ **No issues found.** Nothing survived either lane." in body
+
+
+def test_failed_shape_lane_is_not_reported_as_an_all_clear():
+    body = comment.render_markdown([], None, SHAPE)
+    assert "No issues found" not in body
+    assert "**Shape** — could not be reviewed" in body
+    assert "**Code defects** — none" in body
 
 
 def test_findings_render_as_a_matrix():

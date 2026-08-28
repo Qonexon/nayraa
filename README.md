@@ -152,13 +152,17 @@ every run, including runs that found nothing:
   location. Every row is also posted inline on the line it concerns; the table exists so
   the state of a review is legible without hunting through the Files tab.
 - **Shape** — the objections, with the paths that carry each one.
-- **No issues found** — stated explicitly when both lanes came back empty, along with what
-  that does and does not mean.
+- **No issues found** — stated explicitly when both lanes came back empty.
 
 That last case is the point of always posting. A reviewer that stays silent is
 indistinguishable from one that crashed, and "nothing survived either lane" is a different
-claim from "this code is fine" — the comment says which one it is. Shape objections never
-appear inline, and nothing here blocks a merge.
+claim from "this code is fine" — the comment says which one it is. A lane that failed says
+so too, rather than reporting its silence as an all-clear. Shape objections never appear
+inline, and nothing here blocks a merge.
+
+Because the comment is updated in place, give the workflow a `concurrency` group keyed on
+the pull request (as the example does). Without one, two overlapping runs can each find no
+existing comment and post their own, and the slower run wins.
 
 ## Configuration
 
@@ -220,7 +224,7 @@ This is deliberate. A reviewer that reports nothing is indistinguishable from a 
 unless it tells you *why* it said nothing. `candidates: 0` run after run means the first
 pass is too strict; `candidates: 8, refuted: 8` means the second pass is.
 
-With `shape-review` enabled, the shape lane writes its own counters:
+The shape lane writes its own counters, on by default:
 
 ```
 shape: 12 files

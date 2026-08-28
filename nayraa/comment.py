@@ -31,7 +31,9 @@ def _defect_block(findings: list[Finding]) -> list[str]:
     return blocks
 
 
-def _shape_block(objections: list[ShapeObjection]) -> list[str]:
+def _shape_block(objections: list[ShapeObjection] | None) -> list[str]:
+    if objections is None:
+        return ["**Shape** — could not be reviewed, see the job log", ""]
     if not objections:
         return ["**Shape** — no objections", ""]
     blocks = [f"**Shape** — {len(objections)}", ""]
@@ -51,20 +53,13 @@ def _shape_block(objections: list[ShapeObjection]) -> list[str]:
 
 def render_markdown(
     findings: list[Finding],
-    objections: list[ShapeObjection],
+    objections: list[ShapeObjection] | None,
     shape: PrShape | None,
 ) -> str:
     blocks = [MARKER, "**nayraa**", ""]
 
-    if not findings and not objections:
-        blocks.append("**No issues found.**")
-        blocks.append("")
-        blocks.append(
-            "Nothing survived either lane: no correctness defect held up under "
-            "refutation, and no objection to the shape of this pull request held "
-            "up under justification. That is the expected result for a focused "
-            "pull request, and it is not a claim that the code is perfect."
-        )
+    if not findings and objections == []:
+        blocks.append("✅ **No issues found.** Nothing survived either lane.")
         blocks.append("")
     else:
         blocks.extend(_defect_block(findings))
