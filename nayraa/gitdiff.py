@@ -96,6 +96,16 @@ def file_statuses(repo_root: Path, base: str, head: str) -> list[tuple[str, str]
     return statuses
 
 
+def _numstat_path(raw: str) -> str:
+    if "=>" not in raw:
+        return raw
+    if "{" in raw and "}" in raw:
+        prefix, rest = raw.split("{", 1)
+        inner, suffix = rest.split("}", 1)
+        return f"{prefix}{inner.split('=>')[-1].strip()}{suffix}"
+    return raw.split("=>")[-1].strip()
+
+
 def line_counts(repo_root: Path, base: str, head: str) -> tuple[int, int]:
     result = _git_run(
         ["git", "-C", str(repo_root), "diff", "--numstat", f"{base}...{head}"],
@@ -107,7 +117,7 @@ def line_counts(repo_root: Path, base: str, head: str) -> tuple[int, int]:
         parts = line.split("\t")
         if len(parts) < 3:
             continue
-        if is_excluded(parts[-1]):
+        if is_excluded(_numstat_path(parts[-1])):
             continue
         if parts[0] == "-" or parts[1] == "-":
             continue

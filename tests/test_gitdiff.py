@@ -1,6 +1,6 @@
 import pytest
 
-from nayraa.gitdiff import GitError, changed_files
+from nayraa.gitdiff import GitError, _numstat_path, changed_files
 
 
 def test_changed_files_returns_a_py_with_correct_lines(repo):
@@ -53,3 +53,9 @@ def test_pure_deletion_records_anchor_line(tmp_path):
     assert len(cfs) == 1
     assert cfs[0].changed_lines, "pure deletion must record an anchor line"
 
+
+def test_numstat_path_resolves_rename_forms():
+    assert _numstat_path("pkg/a.py") == "pkg/a.py"
+    assert _numstat_path("old.py => new.py") == "new.py"
+    assert _numstat_path("src/{old => new}/a.py") == "src/new/a.py"
+    assert _numstat_path("{src => vendor}/a.py") == "vendor/a.py"

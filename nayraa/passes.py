@@ -1,6 +1,6 @@
 import concurrent.futures
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from nayraa import budget
@@ -386,16 +386,28 @@ def justify(
     return Justification(justified=result["justified"], reason=result["reason"])
 
 
+def _grounded_evidence(
+    evidence: tuple[str, ...], paths: tuple[str, ...]
+) -> tuple[str, ...]:
+    if not paths:
+        return evidence
+    known = set(paths)
+    return tuple(e for e in evidence if e.lstrip("./") in known or e in known)
+
+
 def review_shape(
     client: ModelClient, bundle: Bundle, shape: PrShape
 ) -> list[ShapeObjection]:
     objections = assess_shape(client, bundle, shape)
     print(f"shape_objections: {len(objections)}", file=sys.stderr)
-    survivors = [
-        o
-        for o in objections
-        if o.confidence >= budget.MIN_SHAPE_CONFIDENCE and o.evidence
-    ]
+    survivors = []
+    for o in objections:
+        if o.confidence < budget.MIN_SHAPE_CONFIDENCE:
+            continue
+        evidence = _grounded_evidence(o.evidence, shape.paths)
+        if not evidence:
+            continue
+        survivors.append(o if evidence == o.evidence else replace(o, evidence=evidence))
     survivors.sort(key=lambda o: -o.confidence)
     survivors = survivors[: budget.MAX_SHAPE_OBJECTIONS]
     print(
@@ -406,12 +418,13 @@ def review_shape(
         max_workers=budget.JUSTIFY_WORKERS
     ) as executor:
         futures = {
-            executor.submit(justify, client, bundle, shape, o): o for o in survivors
+            executor.submit(justify, client, bundle, shape, o): i
+            for i, o in enumerate(survivors)
         }
-        justifications: dict[ShapeObjection, Justification] = {}
+        justifications: dict[int, Justification] = {}
         for fut in concurrent.futures.as_completed(futures):
             justifications[futures[fut]] = fut.result()
-    kept = [o for o in survivors if not justifications[o].justified]
+    kept = [o for i, o in enumerate(survivors) if not justifications[i].justified]
     print(f"shape_justified: {len(survivors) - len(kept)}", file=sys.stderr)
     print(f"shape_reported: {len(kept)}", file=sys.stderr)
     return kept

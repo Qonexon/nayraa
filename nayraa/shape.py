@@ -27,6 +27,7 @@ class PrShape:
     directories: list[str]
     commit_subjects: list[str]
     test_files: int
+    paths: tuple[str, ...] = ()
 
     def render(self) -> str:
         dirs = self.directories[: budget.MAX_SHAPE_DIRECTORIES]
@@ -71,4 +72,5 @@ def compute(repo_root: Path, base: str, head: str) -> PrShape:
         directories=directories,
         commit_subjects=gitdiff.commit_subjects(repo_root, base, head),
         test_files=sum(1 for _, path in statuses if _is_test_path(path)),
+        paths=tuple(path for _, path in statuses),
     )

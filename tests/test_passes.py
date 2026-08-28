@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from nayraa import passes
 from nayraa.bundle import Bundle, Section
 from nayraa.model import FakeClient
@@ -164,6 +166,9 @@ SHAPE = PrShape(
 )
 
 
+GROUNDED_SHAPE = replace(SHAPE, paths=("api/export.py", "api/client.py"))
+
+
 def _bundle() -> Bundle:
     return Bundle(
         parts={Section.DIFF: ""},
@@ -245,3 +250,35 @@ def test_shape_reaches_the_model():
     assert "pr_shape" in user
     assert "files changed: 9" in user
     assert "bump timeout" in user
+
+
+def test_evidence_that_is_not_a_changed_path_is_dropped():
+    client = FakeClient(
+        [{"objections": [_objection(evidence=["unrelated concerns"])]}],
+    )
+    result = passes.review_shape(client, _bundle(), GROUNDED_SHAPE)
+    assert result == []
+    assert len(client.calls) == 1
+
+
+def test_ungrounded_evidence_is_stripped_from_a_real_objection():
+    client = FakeClient(
+        [
+            {"objections": [_objection(evidence=["api/export.py", "vibes"])]},
+            {"justified": False, "reason": "r"},
+        ]
+    )
+    result = passes.review_shape(client, _bundle(), GROUNDED_SHAPE)
+    assert result[0].evidence == ("api/export.py",)
+
+
+def test_identical_objections_get_independent_verdicts():
+    client = FakeClient(
+        [
+            {"objections": [_objection(), _objection()]},
+            {"justified": True, "reason": "r"},
+            {"justified": False, "reason": "r"},
+        ]
+    )
+    result = passes.review_shape(client, _bundle(), GROUNDED_SHAPE)
+    assert len(result) == 1

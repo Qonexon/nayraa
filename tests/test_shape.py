@@ -1,8 +1,7 @@
 from nayraa import shape
-from tests.conftest import RepoFixture
 
 
-def test_compute_counts_files_and_lines(repo: RepoFixture):
+def test_compute_counts_files_and_lines(repo):
     s = shape.compute(repo.root, repo.base, repo.head)
     assert s.files_changed == 1
     assert s.modified_files == 1
@@ -11,12 +10,12 @@ def test_compute_counts_files_and_lines(repo: RepoFixture):
     assert s.directories == ["pkg"]
 
 
-def test_compute_collects_commit_subjects(repo: RepoFixture):
+def test_compute_collects_commit_subjects(repo):
     s = shape.compute(repo.root, repo.base, repo.head)
     assert s.commit_subjects == ["change helper signature"]
 
 
-def test_render_reports_shape_without_a_verdict(repo: RepoFixture):
+def test_render_reports_shape_without_a_verdict(repo):
     s = shape.compute(repo.root, repo.base, repo.head)
     rendered = s.render()
     assert "files changed: 1" in rendered
