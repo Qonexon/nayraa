@@ -79,6 +79,61 @@ def changed_files(repo_root: Path, base: str, head: str) -> list[ChangedFile]:
     return changed
 
 
+def file_statuses(repo_root: Path, base: str, head: str) -> list[tuple[str, str]]:
+    result = _git_run(
+        ["git", "-C", str(repo_root), "diff", "--name-status", f"{base}...{head}"],
+        repo_root,
+    )
+    statuses: list[tuple[str, str]] = []
+    for line in result.stdout.splitlines():
+        if not line:
+            continue
+        parts = line.split("\t")
+        path = parts[-1]
+        if is_excluded(path):
+            continue
+        statuses.append((parts[0][0], path))
+    return statuses
+
+
+def _numstat_path(raw: str) -> str:
+    if "=>" not in raw:
+        return raw
+    if "{" in raw and "}" in raw:
+        prefix, rest = raw.split("{", 1)
+        inner, suffix = rest.split("}", 1)
+        return f"{prefix}{inner.split('=>')[-1].strip()}{suffix}"
+    return raw.split("=>")[-1].strip()
+
+
+def line_counts(repo_root: Path, base: str, head: str) -> tuple[int, int]:
+    result = _git_run(
+        ["git", "-C", str(repo_root), "diff", "--numstat", f"{base}...{head}"],
+        repo_root,
+    )
+    added = 0
+    removed = 0
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+        if is_excluded(_numstat_path(parts[-1])):
+            continue
+        if parts[0] == "-" or parts[1] == "-":
+            continue
+        added += int(parts[0])
+        removed += int(parts[1])
+    return added, removed
+
+
+def commit_subjects(repo_root: Path, base: str, head: str) -> list[str]:
+    result = _git_run(
+        ["git", "-C", str(repo_root), "log", "--format=%s", f"{base}..{head}"],
+        repo_root,
+    )
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
 def unified_diff(repo_root: Path, base: str, head: str) -> str:
     changed = changed_files(repo_root, base, head)
     paths = [cf.path for cf in changed]

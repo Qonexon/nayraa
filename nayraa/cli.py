@@ -4,7 +4,7 @@ import sys
 import traceback
 from pathlib import Path
 
-from nayraa import budget, bundle, passes, rdjson
+from nayraa import budget, bundle, comment, passes, rdjson, shape
 from nayraa.bundle import build_bundle
 from nayraa.model import GeminiClient, ModelClient
 
@@ -17,6 +17,7 @@ def main() -> None:
         parser.add_argument("--head", required=True)
         parser.add_argument("--src-root", action="append", default=[])
         parser.add_argument("--rubric", type=Path)
+        parser.add_argument("--summary-out", type=Path)
         parser.add_argument("--model")
         args = parser.parse_args()
 
@@ -67,6 +68,25 @@ def main() -> None:
         clamped = [rdjson.clamp_to_diff_lines(f, changed) for f in findings]
         output = rdjson.to_rdjsonl(clamped)
         print(output, end="")
+
+        if args.summary_out is not None:
+            pr_shape: shape.PrShape | None = None
+            try:
+                pr_shape = shape.compute(args.repo_root, args.base, args.head)
+                print(f"shape: {pr_shape.files_changed} files", file=sys.stderr)
+            except Exception:
+                traceback.print_exc(file=sys.stderr)
+
+            objections: list[passes.ShapeObjection] | None = None
+            if pr_shape is not None:
+                try:
+                    objections = passes.review_shape(client, b, pr_shape)
+                except Exception:
+                    traceback.print_exc(file=sys.stderr)
+
+            args.summary_out.write_text(
+                comment.render_markdown(clamped, objections, pr_shape)
+            )
     except Exception:
         traceback.print_exc(file=sys.stderr)
         return
