@@ -1,5 +1,6 @@
 from nayraa import comment
-from nayraa.passes import Finding, ShapeObjection
+from nayraa.finder import Finding
+from nayraa.passes import ShapeObjection
 from nayraa.shape import PrShape
 
 SHAPE = PrShape(
@@ -96,3 +97,10 @@ def test_missing_shape_degrades_honestly():
     body = comment.render_markdown([FINDING], [], None)
     assert "**Code defects** — 1" in body
     assert "shape could not be computed" in body
+
+
+def test_failed_finder_is_not_reported_as_an_all_clear():
+    body = comment.render_markdown([], [], SHAPE, finder_failed=True)
+    assert "No issues found" not in body
+    assert "**Code defects** — could not be reviewed" in body
+    assert "**Shape** — no objections" in body

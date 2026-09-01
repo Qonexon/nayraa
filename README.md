@@ -1,22 +1,20 @@
 # nayraa
 
-AI code review for GitHub pull requests. Bring your own Gemini key, post through
+Reviews the **shape** of a GitHub pull request, and runs an existing reviewer for the
+lines. Bring your own Gemini key, post through
 [reviewdog](https://github.com/reviewdog/reviewdog), keep the whole thing in one small
 Python package.
 
-nayraa exists because most AI reviewers fail in one of two ways: they comment on
-everything until people learn to scroll past them, or they are tuned so conservatively
-that they never say anything at all. Both are useless, and the second is worse because it
-looks healthy.
+Every AI reviewer on the market reviews the same thing: lines of code. But a pull request
+can be free of defects, pass every test, and still be the wrong thing to merge — because
+it does four things at once, or adds a second way to do something the codebase already
+does. Writing code is cheap now; owning it is not. So nayraa reviews along two axes:
 
-They also all review the same thing: lines of code. But a pull request can be free of
-defects, pass every test, and still be the wrong thing to merge — because it does four
-things at once, or adds a second way to do something the codebase already does. Writing
-code is cheap now; owning it is not. So nayraa reviews along two axes, with separate
-prompts and separate output:
-
-- **Correctness** — is this code wrong? Inline comments, one per defect.
-- **Shape** — is this the wrong thing to merge? One pull-request-level comment.
+- **Correctness** — is this code wrong? Delegated to
+  [open-code-review](https://github.com/alibaba/open-code-review), filtered through
+  nayraa's noise policy, posted as inline comments.
+- **Shape** — is this the wrong thing to merge? nayraa's own, and the reason it exists.
+  One pull-request-level comment.
 
 The test that separates them: would the objection still stand after every bug in the diff
 was fixed? See [AGENTS.md](AGENTS.md) for why the two lanes need opposite burdens of proof.
@@ -28,16 +26,17 @@ so every design decision here trades recall for precision.
 
 - **Two values of severity — `blocker` and `major`.** There is no `nit`, `suggestion`, or
   `info` level, so the model has nowhere to put one. The schema is the filter.
-- **Every finding is adversarially refuted before it is posted.** A second model call is
-  asked to *disprove* each candidate and told to default to refuted when uncertain.
 - **Three findings per pull request, maximum.**
 - **Formatting, naming, import order, unused code and missing tests are out of scope.**
   Your linter and type checker already decide those, and they are always right and always
   free. Turn them on first; nayraa is for what they cannot decide.
 - **Findings never block a merge.** The tool exits 0 no matter what — including when it
   crashes. A broken reviewer must not stop your team from shipping.
-- **No agent loop.** Context is assembled deterministically by a script, then two model
-  calls are made per lane. No tool calling, no multi-turn, no nondeterministic retrieval.
+- **Correctness review is somebody else's job.** nayraa used to implement its own, and
+  it was measured proposing 0 findings in 26 model calls on a diff containing two real
+  defects. [Martian's Code Review Bench](https://codereview.withmartian.com/) puts the
+  best tool in the field at 68.6% recall and 56.3% precision — not a gap a small project
+  closes by trying harder. So the lane is delegated and the policy is kept.
 
 ## Quick start
 
@@ -63,7 +62,6 @@ jobs:
         with:
           base: ${{ github.event.pull_request.base.sha }}
           head: ${{ github.event.pull_request.head.sha }}
-          src-roots: .
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -78,34 +76,32 @@ does not check out your repository for you.
 ## How it works
 
 ```
-git diff ──▶ context bundle ──▶ find candidates ──▶ refute each ──▶ rdjsonl ──▶ reviewdog
-                                    (model)          (model)                    (comments)
+git diff ──▶ ocr ──────────▶ JSON ──▶ nayraa policy ──▶ rdjsonl ──▶ reviewdog
+             (agent loop)                                           (comments)
 ```
 
-The context bundle is assembled in priority order, and trimmed from the bottom up when it
-exceeds the token budget:
+The correctness lane runs `ocr review --from <base> --to <head> --format json` and parses
+what comes back. `ocr` is [open-code-review](https://github.com/alibaba/open-code-review)
+(Apache-2.0): a single Go binary with no server and no database, driving a real agent loop
+with its own read-only tools over your checkout. The action installs it for you and it
+uses the same `GEMINI_API_KEY`.
 
-| Section | What it is | Why |
-| --- | --- | --- |
-| `diff` | the unified diff | what changed |
-| `changed_files` | full text of every changed file | a diff hunk is not enough context to judge |
-| `importer_call_sites` | ±15 lines around each call site in dependent files | did this change break a caller |
-| `siblings` | up to 2 files from the same directory | the authoritative statement of local convention |
-| `imports` | full text of direct dependencies | is this change correct given what it calls |
+nayraa's contribution is the filter on the way out:
 
-Two details that matter more than they look:
+| Engine value | Becomes |
+| --- | --- |
+| severity `critical`, `high` | `blocker` |
+| severity `medium` | `major` |
+| severity `low` | dropped |
+| category `bug`, `security`, `performance`, `data`, `api`, `concurrency`, `other` | kept |
+| category `style`, `documentation`, `test`, `maintainability` | dropped |
 
-**Sibling exemplars carry the convention load.** Showing the model the two files next to
-the one being changed is a better statement of house style than any prose description of
-it, because code is what the project actually does.
+Then excluded paths are dropped and the result is capped at three findings, blockers
+first. That is the whole lane: a subprocess and a policy.
 
-**High fan-out changes degrade honestly.** If a changed file has more than 30 dependents,
-nayraa does not try to brute-force the blast radius. It reviews the change on its own
-merits and reports one extra finding saying so — `high fan-out change: N dependents,
-impact not machine-verified`. Silent truncation would read as "no problems found".
-
-Under the token budget, `imports` degrades to signatures-only (function bodies replaced
-with `pass`) before being dropped entirely, and `siblings` outlives it.
+**The engine is swappable on purpose.** Set `engine` to any shell command containing
+`{base}` and `{head}` that writes findings JSON to stdout, and nayraa will run that
+instead. Never couple to one vendor beyond the mapping above.
 
 ## Pull request shape
 
@@ -137,10 +133,10 @@ Diff size is context, never evidence. Encoding size as the metric would get game
 stacked-garbage pull requests within two sprints, and would cry wolf on every legitimate
 large refactor.
 
-**The second pass inverts.** Where a correctness finding must survive an attempt to
-*refute* it, a shape objection must survive an attempt to *justify* it — and uncertainty
-keeps the objection instead of dropping it. Applying the correctness posture here would
-silence the lane completely, because "this does four things" has no line to prove. The
+**The burden of proof is inverted.** A correctness finding has to survive an attempt to
+*refute* it. A shape objection has to survive an attempt to *justify* it — and uncertainty
+keeps the objection instead of dropping it. Demanding proof here would silence the lane
+completely, because "this does four things" has no line to prove itself on. The
 counterweights are the closed set of kinds, the mandatory evidence, and the cap of three.
 
 ## The summary comment
@@ -172,7 +168,7 @@ existing comment and post their own, and the slower run wins.
 | --- | --- | --- | --- |
 | `base` | yes | — | base commit SHA |
 | `head` | yes | — | head commit SHA |
-| `src-roots` | no | `.` | comma-separated package roots for import resolution |
+| `engine` | no | `ocr` | correctness engine, or a command template with `{base}` and `{head}` |
 | `model` | no | — | overrides the built-in default |
 | `summary-comment` | no | `"true"` | shape lane plus the sticky summary comment |
 
@@ -180,17 +176,17 @@ existing comment and post their own, and the slower run wins.
 
 | Variable | Notes |
 | --- | --- |
-| `GEMINI_API_KEY` | required |
+| `GEMINI_API_KEY` | required; used by both the engine and the shape lane |
 | `REVIEWDOG_GITHUB_API_TOKEN` | required for posting; use `secrets.GITHUB_TOKEN` |
-| `AI_REVIEW_MODEL` | optional model override |
+| `AI_REVIEW_MODEL` | optional model override for the shape lane |
 
-If `src-roots` is wrong, the `imports` and `importer_call_sites` sections come back empty
-and reviews get noticeably worse without failing. That is the first thing to check if
-findings look shallow.
+It remains the only secret you create.
 
 ## CLI
 
-The action is a thin wrapper. nayraa writes
+The action is a thin wrapper. It needs `ocr` on `PATH`
+(`npm install -g @alibaba-group/open-code-review`) unless you pass your own `--engine`.
+nayraa writes
 [rdjsonl](https://github.com/reviewdog/reviewdog#reviewdog-diagnostic-format) to stdout and
 never talks to the GitHub API itself:
 
@@ -203,30 +199,18 @@ nayraa --repo-root . --base "$BASE_SHA" --head "$HEAD_SHA" \
 `-filter-mode=nofilter` is required. The default mode reports only on added lines, which
 silently discards findings anchored to context lines.
 
-`--summary-out PATH` additionally runs the shape lane and writes the summary comment body
-to `PATH`. The file is always written, including when nothing was found; if the shape lane
-itself fails, the summary is still written with the correctness findings alone. stdout
-stays pure rdjsonl either way, so the pipe is unaffected. Posting that file is the
-caller's job; the action does it with `gh`.
+`--engine` takes `ocr` (the default) or a command template. `--summary-out PATH` runs the
+shape lane and writes the summary comment body to `PATH`. The file is always written,
+including when nothing was found; if either lane fails, the summary is still written and
+says which one could not be reviewed. stdout stays pure rdjsonl either way, so the pipe is
+unaffected. Posting that file is the caller's job; the action does it with `gh`.
 
 ## Observability
 
 Every run writes counters to stderr:
 
 ```
-candidates: 5
-below_confidence: 1
-refuted: 3
-reported: 1
-```
-
-This is deliberate. A reviewer that reports nothing is indistinguishable from a broken one
-unless it tells you *why* it said nothing. `candidates: 0` run after run means the first
-pass is too strict; `candidates: 8, refuted: 8` means the second pass is.
-
-The shape lane writes its own counters, on by default:
-
-```
+defects: 1
 shape: 12 files
 shape_objections: 2
 shape_dropped_before_justify: 1
@@ -234,40 +218,27 @@ shape_justified: 0
 shape_reported: 1
 ```
 
-`shape_justified` running high means the justify pass is too easy to satisfy;
-`shape_objections: 0` run after run means the first shape pass is.
+This is deliberate. A reviewer that reports nothing is indistinguishable from a broken one
+unless it tells you *why* it said nothing. `shape_justified` running high means the justify
+pass is too easy to satisfy; `shape_objections: 0` run after run means the objection pass
+is too strict. That second counter is how the old correctness lane was caught returning
+nothing for weeks.
 
 ## Language support
 
-The import graph, symbol extraction and signature stripping are Python-only, built on the
-standard library `ast` module — there is no parser dependency.
-
-Other languages are still reviewed, with the `diff`, `changed_files` and `siblings`
-sections. That is a real context, but it loses the dependency layer, which is where the
-highest-yield findings tend to live.
-
-| Files | Sections |
-| --- | --- |
-| `.py` | all five |
-| everything else | `diff`, `changed_files`, `siblings` |
-
-## Requirements
-
-- Python 3.11+
-- A Gemini API key
-- One dependency (`google-genai`); everything else is standard library
+Whatever the engine supports. nayraa's own half — the shape lane and the policy filter —
+is language-agnostic: it reads git metadata and the engine's JSON, never source syntax.
+The Python-only import graph that used to constrain this is gone.
 
 ## Limitations
 
 - **Fork pull requests do not work.** GitHub withholds secrets and issues a read-only
   token for `pull_request` events from forks, so reviewdog cannot post. Do not reach for
   `pull_request_target` to fix this — it runs untrusted code with your secrets.
-- **Project conventions are not wired into the action yet.** The CLI accepts `--rubric`
-  pointing at a Markdown file appended to the first-pass prompt, but `action.yml` exposes
-  no matching input. Use the CLI directly if you need it.
-- **The token budget is 280K, well under Gemini's limit.** That is deliberate — reasoning
-  over 800K tokens of code is measurably worse than over 200K — but it means very large
-  pull requests get trimmed.
+- **The correctness lane is only as good as the engine.** nayraa contributes the policy,
+  not the finding. If `ocr` misses a defect, so does nayraa. Neither lane has been run
+  against [Code Review Bench](https://codereview.withmartian.com/), so no precision or
+  recall number is claimed here.
 - **Shape review is unmeasured.** It is new, it is on by default so that it produces the
   data that would let us judge it, and until there is an eval set no claim about its
   precision is anything but a stance. Expect to tune it; `summary-comment: "false"` turns
@@ -287,6 +258,6 @@ ruff check .
 pyright
 ```
 
-Tests use a fake model client throughout and make no network calls.
-`scripts/live_api_smoke.py` exercises the real API path and is skipped when
+Tests use a fake model client throughout, never invoke the engine, and make no network
+calls. `scripts/live_api_smoke.py` exercises the real API path and is skipped when
 `GEMINI_API_KEY` is unset.

@@ -33,8 +33,9 @@ easy to get wrong — different burdens of proof.
 | Output | inline comments on lines | one pull-request-level comment |
 | Burden of proof | on the finding | on the author |
 | Default when uncertain | drop it | keep it |
-| Second pass | refute | justify |
-| Status | in use | new, unmeasured |
+| Who reviews | an external engine | nayraa |
+| Second pass | the engine's own | justify |
+| Status | delegated | the reason this project exists |
 
 **The lane test.** Would the objection still stand after every bug in the diff was fixed?
 If no, it is lane 1. If yes, it is lane 2. A finding that cannot answer this question is
@@ -42,10 +43,10 @@ not a finding.
 
 ## Why the burden of proof inverts
 
-Lane 1 defaults to refuted. A correctness claim can be settled: either the code path is
-reachable and the failure is real, or it is not, and the context usually contains enough
-to decide. Demanding proof costs recall and buys precision, which is the trade this
-project wants.
+Lane 1 defaults to dropped. A correctness claim can be settled: either the code path is
+reachable and the failure is real, or it is not. We no longer make that judgement
+ourselves — the engine does — but we still apply the policy on the way out: two
+severities, out-of-scope categories discarded, three findings maximum.
 
 Lane 2 cannot work that way. "This pull request does four unrelated things" has no line
 number to point at and no execution to prove. Apply lane 1's posture to it and every
@@ -82,10 +83,26 @@ both lanes.
 **Findings never block a merge.** The tool exits 0 no matter what, including when it
 crashes. A lane-2 failure must never take lane 1 down with it.
 
+**We do not implement correctness review.** Lane 1 shells out to an existing engine and
+maps its output through our noise policy. This is not modesty, it is measurement: our own
+finding pass returned 0 candidates in 26 calls on a diff with two real defects, and
+Martian's Code Review Bench puts the best tool in the field at 68.6% recall and 56.3%
+precision. That is not a gap a one-person project closes by trying harder. Our value is
+the policy and lane 2, so spend the effort there. The engine is swappable on purpose —
+never couple to one vendor's JSON beyond the mapping in `finder`.
+
+**Capability and permission are separate, and neither alone is enough.** When a pass
+produces nothing, ask both what the prompt forbids and what the pass structurally cannot
+do. Measured on the same diff: the old prompt single-shot found 0/26; the old prompt with
+tools found 0/4; proposal framing without tools ~1/5; proposal framing with tools 6/9.
+Neither change worked alone. Never conclude from one sample — three separate readings in
+one afternoon were overturned by running the same thing five more times.
+
 **Do not add a knob you cannot measure.** Prompt bullets are not free — every named
 pattern is a prior that makes the model hunt for that pattern and find it where it is not.
-If you loosen the finder and the refuter in the same change, you have moved precision in
-an unknown direction. Say so in the pull request, and prefer changing one end at a time.
+If you loosen the objection pass and the justify pass in the same change, you have moved
+precision in an unknown direction. Say so in the pull request, and change one end at a
+time.
 
 **Lane 2 is unmeasured.** It is on by default because it only produces the data that would
 let us judge it by running. Until there is an eval set — real pull requests, known planted
@@ -103,12 +120,10 @@ claim from "this code is fine". The comment says which.
 | Module | Job |
 | --- | --- |
 | `gitdiff` | all git access |
-| `importgraph` | who imports whom |
-| `callsites` | symbols, call sites, siblings, signature stripping |
-| `bundle` | assemble and trim the context bundle |
+| `finder` | lane 1 — run the external engine, map its JSON through our policy |
 | `shape` | deterministic pull-request shape signals, no model |
 | `model` | the Gemini client and the fake used in tests |
-| `passes` | the four model calls: find, refute, assess shape, justify |
+| `passes` | lane 2's model calls: assess shape, justify |
 | `rdjson` | lane 1 output — rdjsonl for reviewdog |
 | `comment` | both lanes' summary — markdown for one sticky comment |
 | `budget` | every tunable constant |

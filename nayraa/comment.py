@@ -1,4 +1,5 @@
-from nayraa.passes import Finding, ShapeObjection
+from nayraa.finder import Finding
+from nayraa.passes import ShapeObjection
 from nayraa.shape import PrShape
 
 MARKER = "<!-- nayraa:summary -->"
@@ -14,7 +15,9 @@ def _cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ").strip()
 
 
-def _defect_block(findings: list[Finding]) -> list[str]:
+def _defect_block(findings: list[Finding], failed: bool) -> list[str]:
+    if failed:
+        return ["**Code defects** — could not be reviewed, see the job log", ""]
     if not findings:
         return ["**Code defects** — none", ""]
     blocks = [
@@ -55,14 +58,15 @@ def render_markdown(
     findings: list[Finding],
     objections: list[ShapeObjection] | None,
     shape: PrShape | None,
+    finder_failed: bool = False,
 ) -> str:
     blocks = [MARKER, "**nayraa**", ""]
 
-    if not findings and objections == []:
+    if not findings and not finder_failed and objections == []:
         blocks.append("✅ **No issues found.** Nothing survived either lane.")
         blocks.append("")
     else:
-        blocks.extend(_defect_block(findings))
+        blocks.extend(_defect_block(findings, finder_failed))
         blocks.extend(_shape_block(objections))
 
     blocks.append("---")

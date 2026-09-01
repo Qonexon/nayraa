@@ -1,7 +1,7 @@
 import json
 from dataclasses import replace
 
-from nayraa.passes import Finding
+from nayraa.finder import Finding
 
 
 def clamp_to_diff_lines(

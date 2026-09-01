@@ -1,5 +1,5 @@
 name: nayraa
-description: AI-powered code review via Gemini and reviewdog
+description: Pull request shape review, plus correctness review via open-code-review
 inputs:
   base:
     description: Base commit SHA
@@ -11,10 +11,13 @@ inputs:
     description: Model name
     required: false
     default: ""
-  src-roots:
-    description: Source root directories (comma-separated)
+  engine:
+    description: >
+      Correctness engine. "ocr" runs open-code-review, which is installed for you.
+      Any other value is run as a shell command with {base} and {head} substituted,
+      and must emit findings as JSON on stdout.
     required: false
-    default: .
+    default: ocr
   summary-comment:
     description: >
       Review the shape of the pull request as a whole and post one sticky comment
@@ -32,13 +35,12 @@ runs:
       env:
         ACTION_PATH: ${{ github.action_path }}
     - uses: reviewdog/action-setup@v1
+    - if: ${{ inputs.engine == 'ocr' }}
+      run: npm install -g @alibaba-group/open-code-review
+      shell: bash
     - run: |
         set -euo pipefail
-        args=(--repo-root . --base "$BASE" --head "$HEAD")
-        IFS=',' read -ra roots <<< "$SRC_ROOTS"
-        for r in "${roots[@]}"; do
-          args+=(--src-root "$r")
-        done
+        args=(--repo-root . --base "$BASE" --head "$HEAD" --engine "$ENGINE")
         if [ -n "$MODEL" ]; then
           args+=(--model "$MODEL")
         fi
@@ -55,7 +57,7 @@ runs:
         BASE: ${{ inputs.base }}
         HEAD: ${{ inputs.head }}
         MODEL: ${{ inputs.model }}
-        SRC_ROOTS: ${{ inputs.src-roots }}
+        ENGINE: ${{ inputs.engine }}
         SUMMARY_COMMENT: ${{ inputs.summary-comment }}
         SUMMARY_FILE: ${{ runner.temp }}/nayraa-summary.md
     - if: ${{ !cancelled() && inputs.summary-comment == 'true' && github.event.pull_request.number }}
