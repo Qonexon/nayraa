@@ -3,6 +3,7 @@ from pathlib import Path
 
 from nayraa import budget
 
+FORBIDDEN_DIRS = (".git",)
 MAX_FILE_CHARS = 120_000
 MAX_SEARCH_CHARS = 20_000
 SEARCH_TIMEOUT = 20
@@ -15,6 +16,9 @@ class RepoTools:
     def _resolve(self, path: str) -> Path | None:
         candidate = (self._root / path).resolve()
         if candidate != self._root and self._root not in candidate.parents:
+            return None
+        relative = candidate.relative_to(self._root).parts
+        if any(part in FORBIDDEN_DIRS for part in relative):
             return None
         if budget.is_excluded(path):
             return None
@@ -45,13 +49,24 @@ class RepoTools:
         """
         try:
             completed = subprocess.run(
-                ["git", "-C", str(self._root), "grep", "-n", "-E", pattern],
+                [
+                    "git",
+                    "-C",
+                    str(self._root),
+                    "grep",
+                    "-n",
+                    "-E",
+                    "-e",
+                    pattern,
+                ],
                 capture_output=True,
                 text=True,
                 timeout=SEARCH_TIMEOUT,
             )
         except (subprocess.SubprocessError, OSError) as exc:
             return f"search failed: {exc}"
+        if completed.returncode > 1:
+            return f"search failed: {completed.stderr.strip() or 'invalid pattern'}"
         output = completed.stdout
         if not output:
             return "no matches"

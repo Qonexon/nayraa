@@ -48,3 +48,31 @@ def test_as_callables_exposes_three_tools(repo):
     tools = RepoTools(repo.root)
     names = [c.__name__ for c in tools.as_callables()]
     assert names == ["read_file", "search", "list_dir"]
+
+
+def test_read_file_refuses_git_directory(repo):
+    tools = RepoTools(repo.root)
+    assert tools.read_file(".git/config").startswith("no such file")
+
+
+def test_list_dir_refuses_git_directory(repo):
+    tools = RepoTools(repo.root)
+    assert tools.list_dir(".git").startswith("no such directory")
+
+
+def test_read_file_refuses_nested_git_path(repo):
+    tools = RepoTools(repo.root)
+    assert tools.read_file(".git/refs/heads/main").startswith("no such file")
+
+
+def test_search_pattern_starting_with_hyphen_is_not_a_flag(repo):
+    tools = RepoTools(repo.root)
+    result = tools.search("-v")
+    assert "def helper" not in result
+    assert "def sibling" not in result
+
+
+def test_search_reports_an_invalid_pattern(repo):
+    tools = RepoTools(repo.root)
+    result = tools.search("def helper(")
+    assert result.startswith("search failed")

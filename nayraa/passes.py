@@ -197,8 +197,11 @@ SYSTEM_PROMPT_VERDICT = (
     "3. Is the condition already handled elsewhere — a guard, a validator, a default, "
     "a\n"
     "caller-side check?\n"
-    "4. Does the finding depend on code that is not in the context? "
-    "If so it is speculation.\n"
+    "4. Does the finding depend on code you have not looked at? Look at it. "
+    "If you have tools,\n"
+    "read the file the finding names and the files around it before you decide. "
+    "A finding is\n"
+    "only speculation if you looked and still could not tell.\n"
     "5. Would this fire on the code as it existed before this diff? "
     "If so it is pre-existing\n"
     "and out of scope for this review.\n"
@@ -206,9 +209,18 @@ SYSTEM_PROMPT_VERDICT = (
     "If any of these refutes the finding, set refuted to true.\n"
     "\n"
     "Default to refuted true. Only set it false when you can point to specific lines "
-    "in the\n"
-    "provided context that prove the defect is real and reachable. "
-    "Uncertainty means refuted."
+    "that prove\n"
+    "the defect is real and reachable. Uncertainty means refuted — but uncertainty you "
+    "could\n"
+    "have resolved by reading a file is not uncertainty, it is laziness. Read the file."
+)
+
+SYSTEM_PROMPT_VERDICT_FORMAT = (
+    "You convert a verdict written as prose into JSON.\n"
+    "\n"
+    "Set refuted to true only if the prose concludes the finding is wrong, "
+    "unreachable, already\n"
+    "handled, pre-existing, or unverifiable. Copy the stated reason faithfully."
 )
 
 
@@ -334,18 +346,34 @@ def find_candidates(
     return findings
 
 
-def refute(client: ModelClient, bundle: Bundle, finding: Finding) -> Verdict:
-    system = SYSTEM_PROMPT_VERDICT
-    user = (
+def refute(
+    client: ModelClient,
+    bundle: Bundle,
+    finding: Finding,
+    tools: RepoTools | None = None,
+) -> Verdict:
+    claim = (
         f"path: {finding.path}\n"
         f"line: {finding.line}\n"
         f"severity: {finding.severity}\n"
         f"claim: {finding.claim}\n"
         f"failure_scenario: {finding.failure_scenario}\n"
         f"confidence: {finding.confidence}\n\n"
-        f"{bundle.render()}"
     )
-    result = client.complete_json(system, user, VERDICT_SCHEMA)
+    if tools is None:
+        result = client.complete_json(
+            SYSTEM_PROMPT_VERDICT, claim + bundle.render(), VERDICT_SCHEMA
+        )
+    else:
+        prose = client.complete_with_tools(
+            SYSTEM_PROMPT_VERDICT,
+            claim + bundle.parts.get(Section.DIFF, ""),
+            tools.as_callables(),
+            budget.REFUTE_TOOL_CALLS,
+        )
+        result = client.complete_json(
+            SYSTEM_PROMPT_VERDICT_FORMAT, prose, VERDICT_SCHEMA
+        )
     return Verdict(refuted=result["refuted"], reason=result["reason"])
 
 
@@ -367,7 +395,9 @@ def review(
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=budget.REFUTE_WORKERS
     ) as executor:
-        futures = {executor.submit(refute, client, bundle, f): f for f in survivors}
+        futures = {
+            executor.submit(refute, client, bundle, f, tools): f for f in survivors
+        }
         verdicts: dict[Finding, Verdict] = {}
         for fut in concurrent.futures.as_completed(futures):
             verdicts[futures[fut]] = fut.result()

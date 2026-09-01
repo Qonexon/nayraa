@@ -6,6 +6,7 @@ from pathlib import Path
 from nayraa import passes
 from nayraa.bundle import build_bundle
 from nayraa.model import GeminiClient
+from nayraa.tools import RepoTools
 
 
 def main() -> None:
@@ -14,6 +15,7 @@ def main() -> None:
     parser.add_argument("--base", required=True)
     parser.add_argument("--head", required=True)
     parser.add_argument("--src-root", action="append", default=[])
+    parser.add_argument("--tools", action="store_true")
     parser.add_argument("--model", default=os.environ.get("AI_REVIEW_MODEL", "gemini-3.7-flash"))
     args = parser.parse_args()
 
@@ -32,7 +34,8 @@ def main() -> None:
     )
     print(f"bundle: {bundle.token_count} tokens, dropped={bundle.dropped}", file=sys.stderr)
 
-    candidates = passes.find_candidates(client, bundle, rubric=None)
+    tools = RepoTools(args.repo_root) if args.tools else None
+    candidates = passes.find_candidates(client, bundle, rubric=None, tools=tools)
     print(f"\n=== candidates: {len(candidates)} ===")
     for c in candidates:
         print(f"[{c.confidence:.2f}] {c.severity:8} {c.path}:{c.line}")

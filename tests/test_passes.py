@@ -378,3 +378,48 @@ def test_rubric_reaches_the_agent():
     system, _ = client.tool_calls[0]
     assert "CODEBASE CONVENTIONS" in system
     assert "always use type hints" in system
+
+
+def _finding() -> passes.Finding:
+    return passes.Finding(
+        path="api/export.py",
+        line=12,
+        severity="major",
+        claim="off by one",
+        failure_scenario="drops the last row",
+        confidence=0.9,
+    )
+
+
+def test_refute_without_tools_makes_one_call():
+    client = FakeClient([{"refuted": True, "reason": "guarded upstream"}])
+    verdict = passes.refute(client, _bundle(), _finding())
+    assert verdict.refuted is True
+    assert len(client.calls) == 1
+    assert len(client.tool_calls) == 0
+
+
+def test_refute_with_tools_investigates_then_formats():
+    client = FakeClient(
+        [{"refuted": False, "reason": "reachable from cli"}],
+        prose=["I read api/export.py and the caller. The defect is real."],
+    )
+    verdict = passes.refute(client, _bundle(), _finding(), tools=RepoTools(Path(".")))
+    assert verdict.refuted is False
+    assert len(client.tool_calls) == 1
+    system, user = client.tool_calls[0]
+    assert system == passes.SYSTEM_PROMPT_VERDICT
+    assert "off by one" in user
+    format_system, format_user, _ = client.calls[0]
+    assert format_system == passes.SYSTEM_PROMPT_VERDICT_FORMAT
+    assert format_user.startswith("I read api/export.py")
+
+
+def test_review_passes_tools_through_to_refute():
+    client = FakeClient(
+        [_findings_response(), {"refuted": False, "reason": "real"}],
+        prose=["a finding at api/export.py:42", "verified, the defect is real"],
+    )
+    result = passes.review(client, _bundle(), None, RepoTools(Path(".")))
+    assert len(result) == 1
+    assert len(client.tool_calls) == 2
