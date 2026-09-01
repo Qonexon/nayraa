@@ -76,8 +76,11 @@ leaving nowhere to put a hedge: two severities and no `nit`, three objection kin
 reviewer to be more decisive, tighten the schema, not the adjectives.
 
 **Noise is the enemy, not missed findings.** A reviewer nobody reads is worth zero. Every
-trade here spends recall to buy precision. Zero findings is a valid and common answer in
-both lanes.
+trade here spends recall to buy precision. But never say that to the model: telling a
+finder that zero findings is a common answer is how this project spent 26 calls proposing
+nothing on a diff with two real defects. Spend recall in the schema and in the second pass,
+where it is bounded, not in the instruction that decides whether the first pass looks at
+all.
 
 **Findings never block a merge.** The tool exits 0 no matter what, including when it
 crashes. A lane-2 failure must never take lane 1 down with it.
@@ -92,6 +95,12 @@ let us judge it by running. Until there is an eval set — real pull requests, k
 defects, hit rate and false-positive rate — no claim about either lane's precision is
 anything more than a stance. Building that harness beats adding another prompt bullet to
 either lane.
+
+**Capability and permission are separate.** When a pass produces nothing, check both what
+the prompt forbids and what the pass is structurally incapable of. A prompt that says zero
+findings is valid will produce exactly that. Adding tools to read the codebase alone changes
+nothing. Reframing without tools helps only slightly. Only changing both prompt and
+capability together moved the outcome.
 
 **Say what happened, even when nothing did.** Both lanes report into one sticky comment
 that is posted on every run, including empty ones. A reviewer that stays silent is
@@ -108,7 +117,8 @@ claim from "this code is fine". The comment says which.
 | `bundle` | assemble and trim the context bundle |
 | `shape` | deterministic pull-request shape signals, no model |
 | `model` | the Gemini client and the fake used in tests |
-| `passes` | the four model calls: find, refute, assess shape, justify |
+| `tools` | the three read-only tools the finding pass can call (read_file, search, list_dir) |
+| `passes` | the model calls: find, format, refute, assess shape, justify |
 | `rdjson` | lane 1 output — rdjsonl for reviewdog |
 | `comment` | both lanes' summary — markdown for one sticky comment |
 | `budget` | every tunable constant |

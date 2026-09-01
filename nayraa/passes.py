@@ -4,9 +4,10 @@ from dataclasses import dataclass, replace
 from typing import Literal
 
 from nayraa import budget
-from nayraa.bundle import Bundle
+from nayraa.bundle import Bundle, Section
 from nayraa.model import ModelClient
 from nayraa.shape import PrShape
+from nayraa.tools import RepoTools
 
 
 @dataclass(frozen=True)
@@ -118,16 +119,36 @@ JUSTIFY_SCHEMA: dict = {
 }
 
 
-SYSTEM_PROMPT_FINDINGS = (
-    "You are a senior engineer reviewing a pull request in this codebase. "
-    "You are the last\n"
-    "reviewer before merge.\n"
+SYSTEM_PROMPT_FORMAT = (
+    "You convert a code review written as prose into JSON.\n"
     "\n"
-    "Report only defects that would make you block the merge. "
-    "A defect is something that\n"
+    "Copy the findings faithfully. Do not add findings. Do not drop findings. "
+    "Do not soften\n"
+    "or reword a claim. If the review states there are no findings, return an empty "
+    "array."
+)
+
+SYSTEM_PROMPT_FINDINGS = (
+    "You are a senior engineer reviewing a pull request in this codebase.\n"
+    "\n"
+    "You are the first of two reviewers. Your job is to PROPOSE candidate defects. "
+    "A second\n"
+    "reviewer will try to refute each one, so a candidate that turns out to be wrong "
+    "costs\n"
+    "nothing. Failing to propose a real defect is the only unrecoverable error.\n"
+    "\n"
+    "Propose defects that would make you block the merge. A defect is something that\n"
     "produces wrong behaviour, data loss, a crash, or a security hole.\n"
     "\n"
-    "The context may include sibling files from the same directory as a changed file. "
+    "You have tools: read_file, search, list_dir. You are given the diff, not the full "
+    "text of\n"
+    "the files it touches. Use the tools to read the files around a change, to find "
+    "the callers\n"
+    "of a changed function, and to check how a changed value is used elsewhere. "
+    "Investigate\n"
+    "before you conclude.\n"
+    "\n"
+    "Read the other files in the same directory as a changed file. "
     "Treat those\n"
     "siblings as the authoritative statement of local convention: if the changed code "
     "deviates\n"
@@ -151,7 +172,11 @@ SYSTEM_PROMPT_FINDINGS = (
     "If you cannot\n"
     "state that concretely, the finding does not exist. Do not report it.\n"
     "\n"
-    "Report at most 8 findings. Fewer is better. Zero is a valid and common answer.\n"
+    "Report at most 8 findings.\n"
+    "\n"
+    "When you are done, write your findings as prose. For each one give the file "
+    "path, the\n"
+    "line number, the severity, the claim, and the concrete failure scenario.\n"
     "\n"
     "Set confidence honestly. Use below 0.6 when you are speculating about code you "
     "cannot\n"
@@ -275,13 +300,25 @@ SYSTEM_PROMPT_JUSTIFY = (
 
 
 def find_candidates(
-    client: ModelClient, bundle: Bundle, rubric: str | None
+    client: ModelClient,
+    bundle: Bundle,
+    rubric: str | None,
+    tools: RepoTools | None = None,
 ) -> list[Finding]:
     system = SYSTEM_PROMPT_FINDINGS
     if rubric is not None:
         system = system + "\n\nCODEBASE CONVENTIONS:\n" + rubric
-    user = bundle.render()
-    result = client.complete_json(system, user, FINDINGS_SCHEMA)
+    if tools is None:
+        user = bundle.render()
+        result = client.complete_json(system, user, FINDINGS_SCHEMA)
+    else:
+        prose = client.complete_with_tools(
+            system,
+            bundle.parts.get(Section.DIFF, ""),
+            tools.as_callables(),
+            budget.FINDER_TOOL_CALLS,
+        )
+        result = client.complete_json(SYSTEM_PROMPT_FORMAT, prose, FINDINGS_SCHEMA)
     findings: list[Finding] = []
     for f in result.get("findings", []):
         findings.append(
@@ -312,8 +349,13 @@ def refute(client: ModelClient, bundle: Bundle, finding: Finding) -> Verdict:
     return Verdict(refuted=result["refuted"], reason=result["reason"])
 
 
-def review(client: ModelClient, bundle: Bundle, rubric: str | None) -> list[Finding]:
-    candidates = find_candidates(client, bundle, rubric)
+def review(
+    client: ModelClient,
+    bundle: Bundle,
+    rubric: str | None,
+    tools: RepoTools | None = None,
+) -> list[Finding]:
+    candidates = find_candidates(client, bundle, rubric, tools)
     print(f"candidates: {len(candidates)}", file=sys.stderr)
     if len(candidates) > budget.MAX_CANDIDATE_FINDINGS:
         candidates = candidates[: budget.MAX_CANDIDATE_FINDINGS]

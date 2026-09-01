@@ -1,9 +1,11 @@
 from dataclasses import replace
+from pathlib import Path
 
 from nayraa import passes
 from nayraa.bundle import Bundle, Section
 from nayraa.model import FakeClient
 from nayraa.shape import PrShape
+from nayraa.tools import RepoTools
 
 
 def test_low_confidence_dropped_before_refute():
@@ -301,3 +303,78 @@ def test_identical_objections_get_independent_verdicts():
     )
     result = passes.review_shape(client, _bundle(), GROUNDED_SHAPE)
     assert len(result) == 1
+
+
+def _findings_response(**overrides) -> dict:
+    base = {
+        "path": "src/api.py",
+        "line": 42,
+        "severity": "major",
+        "claim": "buffer overflow",
+        "failure_scenario": "input too long",
+        "confidence": 0.85,
+    }
+    return {"findings": [base | overrides]}
+
+
+def test_no_tools_makes_one_call_and_no_tool_call():
+    client = FakeClient([_findings_response()])
+    result = passes.find_candidates(client, _bundle(), rubric=None, tools=None)
+    assert len(client.calls) == 1
+    assert len(client.tool_calls) == 0
+    assert len(result) == 1
+
+
+def test_tools_make_one_tool_call_then_one_format_call():
+    client = FakeClient([_findings_response()], prose=["a bug at line 42"])
+    result = passes.find_candidates(
+        client, _bundle(), rubric=None, tools=RepoTools(Path("."))
+    )
+    assert len(client.tool_calls) == 1
+    assert len(client.calls) == 1
+    assert len(result) == 1
+
+
+def test_agent_is_seeded_with_the_diff_alone():
+    client = FakeClient([{"findings": []}], prose=["none"])
+    b = Bundle(
+        parts={Section.DIFF: "unique-diff-marker", Section.SIBLINGS: "sibling text"},
+        token_count=0,
+        dropped=[],
+        high_fanout=[],
+    )
+    passes.find_candidates(client, b, rubric=None, tools=RepoTools(Path(".")))
+    _, user = client.tool_calls[0]
+    assert user == "unique-diff-marker"
+
+
+def test_prose_is_formatted_by_the_format_prompt():
+    client = FakeClient([{"findings": []}], prose=["some prose"])
+    passes.find_candidates(client, _bundle(), rubric=None, tools=RepoTools(Path(".")))
+    system, user, _ = client.calls[0]
+    assert system == passes.SYSTEM_PROMPT_FORMAT
+    assert user == "some prose"
+
+
+def test_formatted_findings_are_parsed():
+    client = FakeClient([_findings_response()], prose=["a finding"])
+    result = passes.find_candidates(
+        client, _bundle(), rubric=None, tools=RepoTools(Path("."))
+    )
+    f = result[0]
+    assert f.path == "src/api.py"
+    assert f.line == 42
+    assert f.severity == "major"
+    assert f.claim == "buffer overflow"
+    assert f.failure_scenario == "input too long"
+    assert f.confidence == 0.85
+
+
+def test_rubric_reaches_the_agent():
+    client = FakeClient([{"findings": []}], prose=["none"])
+    passes.find_candidates(
+        client, _bundle(), rubric="always use type hints", tools=RepoTools(Path("."))
+    )
+    system, _ = client.tool_calls[0]
+    assert "CODEBASE CONVENTIONS" in system
+    assert "always use type hints" in system

@@ -36,8 +36,10 @@ so every design decision here trades recall for precision.
   free. Turn them on first; nayraa is for what they cannot decide.
 - **Findings never block a merge.** The tool exits 0 no matter what — including when it
   crashes. A broken reviewer must not stop your team from shipping.
-- **No agent loop.** Context is assembled deterministically by a script, then two model
-  calls are made per lane. No tool calling, no multi-turn, no nondeterministic retrieval.
+- **The finding pass is an agent loop; nothing else is.** It runs with three read-only
+  tools and decides for itself what to fetch. The refute pass, and both shape-lane passes,
+  remain single deterministic calls against an assembled context bundle with a forced JSON
+  schema.
 
 ## Quick start
 
@@ -78,12 +80,26 @@ does not check out your repository for you.
 ## How it works
 
 ```
-git diff ──▶ context bundle ──▶ find candidates ──▶ refute each ──▶ rdjsonl ──▶ reviewdog
-                                    (model)          (model)                    (comments)
+                ┌─▶ find candidates ─┐
+                │   (agent loop,     │
+   git diff ────┤    tools)          ├─▶ refute each ──▶ rdjsonl ──▶ reviewdog
+                │                    │       (model)                 (comments)
+                └─▶ context bundle ──┘
 ```
 
-The context bundle is assembled in priority order, and trimmed from the bottom up when it
-exceeds the token budget:
+The finder is seeded with the unified diff alone, not the full text of changed files. It
+fetches what it needs itself, through three read-only tools: `read_file(path)`,
+`search(pattern)` (a `git grep`), and `list_dir(path)`. All three refuse paths outside the
+repository root and paths matching the exclusion globs, and the loop is capped at 40 tool
+calls.
+
+Forced JSON output and tool calling are mutually exclusive on the Gemini API, so the
+finding pass drops the response schema while tools are in play. A second, cheap call then
+converts its prose into the findings schema afterwards.
+
+The context bundle has not gone away. It is still built, and it is still what the refute
+pass and the shape lane run against. The context bundle is assembled in priority order, and
+trimmed from the bottom up when it exceeds the token budget:
 
 | Section | What it is | Why |
 | --- | --- | --- |
@@ -272,6 +288,12 @@ highest-yield findings tend to live.
   data that would let us judge it, and until there is an eval set no claim about its
   precision is anything but a stance. Expect to tune it; `summary-comment: "false"` turns
   it off.
+- **The finding agent loop is new and barely measured.** On a diff with two known real
+  bugs, the old single-call finder proposed zero candidates in 26 calls. The new agent
+  loop, with the new prompt, found the first bug in 6 of 9 runs and the second in 2 of 9 —
+  roughly two-thirds recall on one known bug, a starting point rather than a success.
+  Precision is still unmeasured, because the refute pass has only just begun receiving
+  candidates at all.
 - **The summary comment needs `pull-requests: write` and a pull request event.** It posts
   through the GitHub API using `github.token`, so it is skipped outside `pull_request`
   runs and, like the inline lane, does not work on fork pull requests.

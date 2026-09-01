@@ -7,6 +7,7 @@ from pathlib import Path
 from nayraa import budget, bundle, comment, passes, rdjson, shape
 from nayraa.bundle import build_bundle
 from nayraa.model import GeminiClient, ModelClient
+from nayraa.tools import RepoTools
 
 
 def main() -> None:
@@ -59,7 +60,7 @@ def main() -> None:
             print(f"{section_name.value}: {token_count} tokens", file=sys.stderr)
         print(f"total: {b.token_count} tokens", file=sys.stderr)
 
-        findings = passes.review(client, b, rubric)
+        findings = passes.review(client, b, rubric, RepoTools(args.repo_root))
 
         changed: dict[str, frozenset[int]] = {}
         for cf in bundle.gitdiff.changed_files(args.repo_root, args.base, args.head):
