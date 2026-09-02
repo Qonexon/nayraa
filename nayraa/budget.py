@@ -1,13 +1,5 @@
 from pathlib import PurePath
 
-TOKEN_BUDGET = 280_000
-FANOUT_THRESHOLD = 30
-CALL_SITE_CONTEXT_LINES = 15
-MAX_CANDIDATE_FINDINGS = 8
-MAX_FINAL_FINDINGS = 3
-MIN_CONFIDENCE = 0.6
-REFUTE_WORKERS = 4
-
 MAX_SHAPE_OBJECTIONS = 3
 MIN_SHAPE_CONFIDENCE = 0.6
 JUSTIFY_WORKERS = 3
@@ -38,10 +30,6 @@ EXCLUDE_GLOBS = [
     "**/pnpm-lock.yaml",
     "**/poetry.lock",
 ]
-
-
-def estimate_tokens(text: str) -> int:
-    return max(1, len(text) // 4)
 
 
 def is_excluded(path: str) -> bool:

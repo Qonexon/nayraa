@@ -1,55 +1,73 @@
 # nayraa
 
-AI code review for GitHub pull requests. Bring your own Gemini key, post through
-[reviewdog](https://github.com/reviewdog/reviewdog), keep the whole thing in one small
-Python package.
+Reviews the **shape** of a GitHub pull request: whether it is the right thing to merge,
+not whether its lines are correct. Bring your own Gemini key. One sticky comment. Never
+blocks a merge.
 
-nayraa exists because most AI reviewers fail in one of two ways: they comment on
-everything until people learn to scroll past them, or they are tuned so conservatively
-that they never say anything at all. Both are useless, and the second is worse because it
-looks healthy.
+nayraa does not review code for defects, and deliberately so. Every AI reviewer on the
+market does that, several do it well, and this project measured itself doing it badly —
+its own correctness pass proposed zero findings in 26 model calls on a diff containing two
+real bugs. [Martian's Code Review Bench](https://codereview.withmartian.com/) puts the
+best reviewer in the field at 68.6% recall and 56.3% precision, which is not a gap a small
+project closes by trying harder. **Install cubic, Greptile, CodeRabbit or Gemini Code
+Assist for the lines.** nayraa reviews the other axis, which none of them ask about.
 
-They also all review the same thing: lines of code. But a pull request can be free of
-defects, pass every test, and still be the wrong thing to merge — because it does four
-things at once, or adds a second way to do something the codebase already does. Writing
-code is cheap now; owning it is not. So nayraa reviews along two axes, with separate
-prompts and separate output:
+Because a pull request can be free of defects, pass every test, and still be the wrong
+thing to merge — it does four unrelated things at once, it adds a second way to do
+something the codebase already does, it introduces an abstraction with one caller that
+everyone will route around in six months. Writing code is cheap now; owning it is not.
 
-- **Correctness** — is this code wrong? Inline comments, one per defect.
-- **Shape** — is this the wrong thing to merge? One pull-request-level comment.
+## What it objects to
 
-The test that separates them: would the objection still stand after every bug in the diff
-was fixed? See [AGENTS.md](AGENTS.md) for why the two lanes need opposite burdens of proof.
+Exactly three kinds, and nothing else:
 
-## Design stance
+| Kind | Meaning |
+| --- | --- |
+| `mixed_concerns` | two or more unrelated goals that could each have shipped alone |
+| `duplicate_mechanism` | a second way to do something the codebase already does |
+| `unnecessary_complexity` | an abstraction or flag with one caller and no second one |
 
-**Noise is the enemy, not missed findings.** A reviewer nobody reads has a value of zero,
-so every design decision here trades recall for precision.
+Three objections per pull request maximum. Every objection must name the changed paths
+that carry it; one that cannot is dropped before it costs a second model call.
 
-- **Two values of severity — `blocker` and `major`.** There is no `nit`, `suggestion`, or
-  `info` level, so the model has nowhere to put one. The schema is the filter.
-- **Every finding is adversarially refuted before it is posted.** A second model call is
-  asked to *disprove* each candidate and told to default to refuted when uncertain.
-- **Three findings per pull request, maximum.**
-- **Formatting, naming, import order, unused code and missing tests are out of scope.**
-  Your linter and type checker already decide those, and they are always right and always
-  free. Turn them on first; nayraa is for what they cannot decide.
-- **Findings never block a merge.** The tool exits 0 no matter what — including when it
-  crashes. A broken reviewer must not stop your team from shipping.
-- **No agent loop.** Context is assembled deterministically by a script, then two model
-  calls are made per lane. No tool calling, no multi-turn, no nondeterministic retrieval.
+**It is forbidden from arguing about size.** A thousand-line mechanical rename is a good
+pull request; a forty-line change that adds a second source of truth is not. Diff size,
+file count and commit count are given to the model as *context*, never as evidence.
+Encoding size as the metric would get gamed into stacked-garbage pull requests within two
+sprints, and would cry wolf on every legitimate large refactor.
+
+## How it works
+
+```
+git diff ──▶ shape signals ──▶ object ──▶ justify each ──▶ one sticky comment
+             (deterministic)   (model)     (model)
+```
+
+Shape signals are computed from git with no model involved: files changed, added versus
+modified versus deleted, line counts, directories touched, commit subjects, how many
+changed files are tests.
+
+**The second pass inverts the usual burden of proof.** A correctness finding has to
+survive an attempt to *refute* it. A shape objection has to survive an attempt to
+*justify* it — the author's case for why the pull request had to take this shape — and
+uncertainty **keeps** the objection rather than dropping it. Demanding proof here would
+silence the lane completely, because "this does four things" has no line to prove itself
+on. The counterweights are the closed set of kinds, the mandatory path evidence, the
+confidence floor and the cap of three.
 
 ## Quick start
 
-Add a workflow (see [`examples/nayraa.yml`](examples/nayraa.yml)):
-
 ```yaml
-name: nayraa review
+name: nayraa shape review
 on: pull_request
 
 permissions:
   contents: read
   pull-requests: write
+
+concurrency:
+  group: nayraa-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   nayraa:
@@ -63,168 +81,51 @@ jobs:
         with:
           base: ${{ github.event.pull_request.base.sha }}
           head: ${{ github.event.pull_request.head.sha }}
-          src-roots: .
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-`GITHUB_TOKEN` is injected by GitHub automatically, so `GEMINI_API_KEY` is the only secret
-you create.
+`GEMINI_API_KEY` is the only secret you create. `GITHUB_TOKEN` is injected automatically.
+The `concurrency` group matters: the comment is updated in place, so two overlapping runs
+could otherwise each post their own.
 
-The `fetch-depth: 0` and explicit `ref` matter: nayraa diffs two commits, and the action
-does not check out your repository for you.
+`fetch-depth: 0` and the explicit `ref` matter too — nayraa diffs two commits, and the
+action does not check out your repository for you.
 
-## How it works
-
-```
-git diff ──▶ context bundle ──▶ find candidates ──▶ refute each ──▶ rdjsonl ──▶ reviewdog
-                                    (model)          (model)                    (comments)
-```
-
-The context bundle is assembled in priority order, and trimmed from the bottom up when it
-exceeds the token budget:
-
-| Section | What it is | Why |
-| --- | --- | --- |
-| `diff` | the unified diff | what changed |
-| `changed_files` | full text of every changed file | a diff hunk is not enough context to judge |
-| `importer_call_sites` | ±15 lines around each call site in dependent files | did this change break a caller |
-| `siblings` | up to 2 files from the same directory | the authoritative statement of local convention |
-| `imports` | full text of direct dependencies | is this change correct given what it calls |
-
-Two details that matter more than they look:
-
-**Sibling exemplars carry the convention load.** Showing the model the two files next to
-the one being changed is a better statement of house style than any prose description of
-it, because code is what the project actually does.
-
-**High fan-out changes degrade honestly.** If a changed file has more than 30 dependents,
-nayraa does not try to brute-force the blast radius. It reviews the change on its own
-merits and reports one extra finding saying so — `high fan-out change: N dependents,
-impact not machine-verified`. Silent truncation would read as "no problems found".
-
-Under the token budget, `imports` degrades to signatures-only (function bodies replaced
-with `pass`) before being dropped entirely, and `siblings` outlives it.
-
-## Pull request shape
-
-On by default. Set `summary-comment: "false"` to turn the lane and its comment off.
-
-```
-git diff ──▶ shape signals ──▶ find objections ──▶ justify each ──▶ one sticky comment
-             (deterministic)      (model)            (model)
-```
-
-Shape signals are computed from git without a model: files changed, added versus modified
-versus deleted, line counts, directories touched, commit subjects, how many changed files
-are tests. They are handed to the model as *context* about what kind of change this is.
-
-The model may then raise at most three objections, of exactly three kinds:
-
-| Kind | Meaning |
-| --- | --- |
-| `mixed_concerns` | two or more unrelated goals that could each have shipped alone |
-| `duplicate_mechanism` | a second way to do something the codebase already does |
-| `unnecessary_complexity` | an abstraction or flag with one caller and no second one |
-
-Every objection must name the paths that carry it; one that cannot is dropped before it
-costs a second model call.
-
-**The reviewer is forbidden from arguing about size.** A thousand-line mechanical rename
-is a good pull request; a forty-line change that adds a second source of truth is not.
-Diff size is context, never evidence. Encoding size as the metric would get gamed into
-stacked-garbage pull requests within two sprints, and would cry wolf on every legitimate
-large refactor.
-
-**The second pass inverts.** Where a correctness finding must survive an attempt to
-*refute* it, a shape objection must survive an attempt to *justify* it — and uncertainty
-keeps the objection instead of dropping it. Applying the correctness posture here would
-silence the lane completely, because "this does four things" has no line to prove. The
-counterweights are the closed set of kinds, the mandatory evidence, and the cap of three.
-
-## The summary comment
-
-Both lanes report into one sticky comment, updated in place on every push. It is posted on
-every run, including runs that found nothing:
-
-- **Code defects** — a table of what the correctness lane reported, with severity and
-  location. Every row is also posted inline on the line it concerns; the table exists so
-  the state of a review is legible without hunting through the Files tab.
-- **Shape** — the objections, with the paths that carry each one.
-- **No issues found** — stated explicitly when both lanes came back empty.
-
-That last case is the point of always posting. A reviewer that stays silent is
-indistinguishable from one that crashed, and "nothing survived either lane" is a different
-claim from "this code is fine" — the comment says which one it is. A lane that failed says
-so too, rather than reporting its silence as an all-clear. Shape objections never appear
-inline, and nothing here blocks a merge.
-
-Because the comment is updated in place, give the workflow a `concurrency` group keyed on
-the pull request (as the example does). Without one, two overlapping runs can each find no
-existing comment and post their own, and the slower run wins.
-
-## Configuration
-
-### Action inputs
+### Inputs and environment
 
 | Input | Required | Default | Notes |
 | --- | --- | --- | --- |
 | `base` | yes | — | base commit SHA |
 | `head` | yes | — | head commit SHA |
-| `src-roots` | no | `.` | comma-separated package roots for import resolution |
 | `model` | no | — | overrides the built-in default |
-| `summary-comment` | no | `"true"` | shape lane plus the sticky summary comment |
-
-### Environment
 
 | Variable | Notes |
 | --- | --- |
 | `GEMINI_API_KEY` | required |
-| `REVIEWDOG_GITHUB_API_TOKEN` | required for posting; use `secrets.GITHUB_TOKEN` |
-| `AI_REVIEW_MODEL` | optional model override |
+| `NAYRAA_MODEL` | optional model override |
 
-If `src-roots` is wrong, the `imports` and `importer_call_sites` sections come back empty
-and reviews get noticeably worse without failing. That is the first thing to check if
-findings look shallow.
+## The comment
+
+One sticky comment, updated in place on every push, posted on every run:
+
+- **Objections** — each with the paths that carry it.
+- **No objection** — stated explicitly when the lane ran and found nothing.
+- **Could not be run** — stated explicitly when the lane failed.
+
+Those last two are different claims and the comment never confuses them. A reviewer that
+stays silent is indistinguishable from one that crashed.
 
 ## CLI
 
-The action is a thin wrapper. nayraa writes
-[rdjsonl](https://github.com/reviewdog/reviewdog#reviewdog-diagnostic-format) to stdout and
-never talks to the GitHub API itself:
-
 ```bash
-nayraa --repo-root . --base "$BASE_SHA" --head "$HEAD_SHA" \
-  | reviewdog -f=rdjsonl -name=nayraa -reporter=github-pr-review \
-      -filter-mode=nofilter -level=warning
+nayraa --repo-root . --base "$BASE_SHA" --head "$HEAD_SHA" --out shape.md
 ```
 
-`-filter-mode=nofilter` is required. The default mode reports only on added lines, which
-silently discards findings anchored to context lines.
-
-`--summary-out PATH` additionally runs the shape lane and writes the summary comment body
-to `PATH`. The file is always written, including when nothing was found; if the shape lane
-itself fails, the summary is still written with the correctness findings alone. stdout
-stays pure rdjsonl either way, so the pipe is unaffected. Posting that file is the
-caller's job; the action does it with `gh`.
+Writes the comment body to `--out` and nothing to stdout but counters on stderr. Posting
+is the caller's job; the action does it with `gh`.
 
 ## Observability
-
-Every run writes counters to stderr:
-
-```
-candidates: 5
-below_confidence: 1
-refuted: 3
-reported: 1
-```
-
-This is deliberate. A reviewer that reports nothing is indistinguishable from a broken one
-unless it tells you *why* it said nothing. `candidates: 0` run after run means the first
-pass is too strict; `candidates: 8, refuted: 8` means the second pass is.
-
-The shape lane writes its own counters, on by default:
 
 ```
 shape: 12 files
@@ -235,21 +136,21 @@ shape_reported: 1
 ```
 
 `shape_justified` running high means the justify pass is too easy to satisfy;
-`shape_objections: 0` run after run means the first shape pass is.
+`shape_objections: 0` run after run means the objection pass is too strict. Those counters
+are how this project caught its own correctness lane returning nothing for weeks.
 
-## Language support
+## Status
 
-The import graph, symbol extraction and signature stripping are Python-only, built on the
-standard library `ast` module — there is no parser dependency.
+Verified on a fixture pair: a pull request with three planted shape defects drew objections
+in 3 of 3 runs at confidence 0.90–1.00, naming the right files; a clean pull request drew
+zero in 3 of 3. It correctly identified mixed concerns and a one-implementation strategy
+abstraction, and **missed a duplicated retry helper** — `duplicate_mechanism` needs to see
+code outside the diff, and the objection pass currently only sees the diff. That is the
+known gap.
 
-Other languages are still reviewed, with the `diff`, `changed_files` and `siblings`
-sections. That is a real context, but it loses the dependency layer, which is where the
-highest-yield findings tend to live.
-
-| Files | Sections |
-| --- | --- |
-| `.py` | all five |
-| everything else | `diff`, `changed_files`, `siblings` |
+Beyond that fixture it is unmeasured. There is no public benchmark for pull request shape:
+Code Review Bench scores line-level defect finding, which is the axis nayraa deliberately
+does not compete on.
 
 ## Requirements
 
@@ -259,24 +160,12 @@ highest-yield findings tend to live.
 
 ## Limitations
 
-- **Fork pull requests do not work.** GitHub withholds secrets and issues a read-only
-  token for `pull_request` events from forks, so reviewdog cannot post. Do not reach for
-  `pull_request_target` to fix this — it runs untrusted code with your secrets.
-- **Project conventions are not wired into the action yet.** The CLI accepts `--rubric`
-  pointing at a Markdown file appended to the first-pass prompt, but `action.yml` exposes
-  no matching input. Use the CLI directly if you need it.
-- **The token budget is 280K, well under Gemini's limit.** That is deliberate — reasoning
-  over 800K tokens of code is measurably worse than over 200K — but it means very large
-  pull requests get trimmed.
-- **Shape review is unmeasured.** It is new, it is on by default so that it produces the
-  data that would let us judge it, and until there is an eval set no claim about its
-  precision is anything but a stance. Expect to tune it; `summary-comment: "false"` turns
-  it off.
-- **The summary comment needs `pull-requests: write` and a pull request event.** It posts
-  through the GitHub API using `github.token`, so it is skipped outside `pull_request`
-  runs and, like the inline lane, does not work on fork pull requests.
-- **This is a young project** (`v0`). The interface may move. Pin the `v0` alias rather
-  than assuming stability.
+- **Fork pull requests do not work.** GitHub withholds secrets for `pull_request` events
+  from forks. Do not reach for `pull_request_target` — it runs untrusted code with your
+  secrets.
+- **`duplicate_mechanism` under-fires**, per the fixture above.
+- **It needs `pull-requests: write` and a pull request event**, and is skipped otherwise.
+- **This is a young project** (`v0`). Pin the `v0` alias rather than assuming stability.
 
 ## Development
 
@@ -287,6 +176,4 @@ ruff check .
 pyright
 ```
 
-Tests use a fake model client throughout and make no network calls.
-`scripts/live_api_smoke.py` exercises the real API path and is skipped when
-`GEMINI_API_KEY` is unset.
+Tests use a fake model client and make no network calls.
