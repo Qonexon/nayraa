@@ -44,7 +44,8 @@ runs:
         fi
         ids=$(gh api "repos/${REPO}/issues/${PR}/comments" --paginate \
                 --jq ".[] | select(.user.type == \"Bot\")
-                          | select(.body | startswith(\"${MARKER}\")) | .id") || ids=""
+                          | select(.body | startswith(\"${MARKER}\")
+                                        or startswith(\"${LEGACY_MARKER}\")) | .id") || ids=""
         id=${ids%%$'\n'*}
         body=$(cat "$OUT")
         if [ -n "$id" ]; then
@@ -72,4 +73,5 @@ runs:
         REPO: ${{ github.repository }}
         PR: ${{ github.event.pull_request.number }}
         MARKER: "<!-- nayraa:shape -->"
+        LEGACY_MARKER: "<!-- nayraa:summary -->"
         OUT: ${{ runner.temp }}/nayraa-shape.md

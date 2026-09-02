@@ -53,3 +53,11 @@ def test_missing_shape_degrades_honestly():
     body = comment.render_markdown([OBJECTION], None)
     assert "**Duplicate mechanism**" in body
     assert "shape could not be computed" in body
+
+
+def test_could_not_run_with_no_shape_at_all():
+    body = comment.render_markdown(None, None)
+    assert body.startswith(comment.MARKER)
+    assert "could not be run" in body
+    assert "shape could not be computed" in body
+    assert "No objection" not in body
